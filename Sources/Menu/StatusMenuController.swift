@@ -159,6 +159,18 @@ public final class StatusMenuController: NSObject, NSMenuDelegate {
         videoItem.state = (settings.contentType == .video) ? .on : .off
         contentTypeMenu.addItem(videoItem)
         
+        let metalHeader = NSMenuItem(title: "Native Metal 4 Compute Shaders (<15MB RAM):", action: nil, keyEquivalent: "")
+        metalHeader.isEnabled = false
+        contentTypeMenu.addItem(metalHeader)
+        
+        for preset in MetalShaderPreset.allCases {
+            let item = NSMenuItem(title: "  \(preset.rawValue)", action: #selector(selectMetalPreset(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = preset
+            item.state = (settings.contentType == .metal && settings.metalPreset == preset) ? .on : .off
+            contentTypeMenu.addItem(item)
+        }
+        
         let webHeader = NSMenuItem(title: "Web / Shaders (WebKit):", action: nil, keyEquivalent: "")
         webHeader.isEnabled = false
         contentTypeMenu.addItem(webHeader)
@@ -354,6 +366,15 @@ public final class StatusMenuController: NSObject, NSMenuDelegate {
         AppSettings.shared.contentType = .video
         updateMenuState()
         WindowManager.shared.updateContentType()
+    }
+    
+    @objc private func selectMetalPreset(_ sender: NSMenuItem) {
+        if let preset = sender.representedObject as? MetalShaderPreset {
+            AppSettings.shared.metalPreset = preset
+            AppSettings.shared.contentType = .metal
+            updateMenuState()
+            WindowManager.shared.updateContentType()
+        }
     }
     
     @objc private func selectWebPreset(_ sender: NSMenuItem) {

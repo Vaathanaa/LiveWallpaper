@@ -60,6 +60,16 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, StatusMenuContr
                 if let type = notification.userInfo?["type"] as? String {
                     if type == "video" {
                         AppSettings.shared.contentType = .video
+                    } else if type == "metal" {
+                        AppSettings.shared.contentType = .metal
+                        if let presetName = notification.userInfo?["preset"] as? String {
+                            for p in MetalShaderPreset.allCases {
+                                if p.rawValue.lowercased().contains(presetName.lowercased()) {
+                                    AppSettings.shared.metalPreset = p
+                                    break
+                                }
+                            }
+                        }
                     } else if type == "web" {
                         AppSettings.shared.contentType = .web
                         if let preset = notification.userInfo?["preset"] as? String {
@@ -110,6 +120,16 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, StatusMenuContr
             Task { @MainActor in
                 AppSettings.shared.isUserPaused = false
                 PlaybackCoordinator.shared.resourceMonitor.evaluateAllConditions()
+            }
+        }
+        
+        center.addObserver(
+            forName: NSNotification.Name("com.local.LiveWallpaper.openSettings"),
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.openSettingsWindow()
             }
         }
     }
