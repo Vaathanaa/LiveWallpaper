@@ -44,4 +44,6 @@ cat << 'EOF' > "$SAVER_BUNDLE/Contents/Info.plist"
 EOF
 
 codesign --force --deep --sign - --options runtime "$SAVER_BUNDLE"
+rm -rf "$PROJECT_DIR/LiveWallpaper.saver"
+cp -R "$SAVER_BUNDLE" "$PROJECT_DIR/LiveWallpaper.saver"
 echo "==> LiveWallpaper.saver built and signed successfully at $SAVER_BUNDLE"

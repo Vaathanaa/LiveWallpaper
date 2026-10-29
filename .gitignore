@@ -6,9 +6,12 @@ xcuserdata/
 *.xcworkspace
 *.xcuserstate
 
-# Local Built App Bundles
+# Local Built App Bundles & Screen Savers
 *.app/
+*.saver/
+*.dmg
 LiveWallpaper.app/
+LiveWallpaper.saver/
 VideoBackdrop.app/
 
 # macOS System & Metadata Files

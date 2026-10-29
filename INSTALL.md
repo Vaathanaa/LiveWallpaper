@@ -11,13 +11,28 @@ This guide details how to download, build, and install **LiveWallpaper** on your
 
 ---
 
-## 🚀 Recommended Method: Automatic 1-Click Install to `/Applications`
+## 🚀 Installation Options
+
+### Option 1: Install via Homebrew Cask
+
+```bash
+# Clone the repository
+git clone https://github.com/Vaathanaa/LiveWallpaper.git
+cd LiveWallpaper
+
+# Install via Homebrew Cask formula
+brew install --cask ./Casks/livewallpaper.rb
+```
+
+---
+
+### Option 2: Automatic 1-Click Build & Install to `/Applications`
 
 Open **Terminal** and run:
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/your-username/LiveWallpaper.git
+git clone https://github.com/Vaathanaa/LiveWallpaper.git
 cd LiveWallpaper
 
 # 2. Run the automated build and installation script
@@ -80,8 +95,9 @@ killall LiveWallpaper 2>/dev/null || true
 
 # Remove the application bundle
 rm -rf /Applications/LiveWallpaper.app
+rm -rf ~/Library/Screen\ Savers/LiveWallpaper.saver
 
-# Optional: Remove user preferences and cached posters
+# Optional: Remove user preferences, downloaded gallery loops, and cached posters
 rm -rf ~/Library/Application\ Support/LiveWallpaper
 defaults delete com.local.LiveWallpaper 2>/dev/null || true
 ```

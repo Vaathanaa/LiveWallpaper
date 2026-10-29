@@ -78,20 +78,24 @@ public final class WindowManager: NSObject, MouseMotionTrackerDelegate {
             }
             .store(in: &cancellables)
             
-        Publishers.Merge4(
+        Publishers.Merge7(
             settings.$dimmingAmount.dropFirst(),
             settings.$blurRadius.dropFirst(),
             settings.$saturationAmount.dropFirst(),
-            settings.$contrastAmount.dropFirst()
+            settings.$contrastAmount.dropFirst(),
+            settings.$vignetteAmount.dropFirst(),
+            settings.$exposureAmount.dropFirst(),
+            settings.$widgetReadabilityMode.dropFirst().map { $0 ? 1.0 : 0.0 }
         )
         .sink { [weak self] _ in
             self?.updateFilters()
         }
         .store(in: &cancellables)
         
-        // Interactive Content Types (Web / Shaders / Particles)
-        Publishers.Merge3(
+        // Interactive Content Types (Web / Metal / Particles)
+        Publishers.Merge4(
             settings.$contentType.dropFirst().map { _ in () },
+            settings.$metalPreset.dropFirst().map { _ in () },
             settings.$selectedWebPreset.dropFirst().map { _ in () },
             settings.$webURLString.dropFirst().map { _ in () }
         )
@@ -252,6 +256,10 @@ public final class WindowManager: NSObject, MouseMotionTrackerDelegate {
         for controller in windowControllers.values {
             controller.updateFilters()
         }
+    }
+    
+    public func refreshDominantColor() {
+        windowControllers.values.first?.playerView.refreshDominantColor()
     }
     
     public func setDisplayLinkActive(_ active: Bool) {

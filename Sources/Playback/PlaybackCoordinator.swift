@@ -83,6 +83,19 @@ public final class PlaybackCoordinator: NSObject, ResourceMonitorDelegate, Video
                 }
             }
             .store(in: &cancellables)
+            
+        // Trimming & Range updates
+        Publishers.Merge(
+            settings.$trimStartTime.dropFirst().map { _ in () },
+            settings.$trimEndTime.dropFirst().map { _ in () }
+        )
+        .debounce(for: .milliseconds(150), scheduler: DispatchQueue.main)
+        .sink { [weak self] _ in
+            Task { @MainActor in
+                await self?.primaryEngine.reconfigureTrimming()
+            }
+        }
+        .store(in: &cancellables)
         
         // Resource / Power / Heavy App triggers
         Publishers.Merge5(

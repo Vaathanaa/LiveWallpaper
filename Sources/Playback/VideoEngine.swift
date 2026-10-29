@@ -1,6 +1,7 @@
 import Foundation
 import AVFoundation
 import CoreGraphics
+import AppKit
 
 @MainActor
 public protocol VideoEngineDelegate: AnyObject {
@@ -32,6 +33,12 @@ public final class VideoEngine: NSObject {
         return player.currentItem?.duration ?? .zero
     }
     
+    // Video Track Metadata & Studio Inspector
+    public private(set) var videoDurationSeconds: Double = 0.0
+    public private(set) var videoResolution: CGSize = .zero
+    public private(set) var videoFrameRate: Float = 0.0
+    public private(set) var videoCodecName: String = "HEVC / H.264"
+    
     private var savedPlaybackTime: CMTime = .zero
     private var targetFPS: TargetFPS = .fps120
     private var isMuted: Bool = true
@@ -62,6 +69,37 @@ public final class VideoEngine: NSObject {
         
         let asset = AVURLAsset(url: url)
         self.currentAsset = asset
+        
+        // Metadata & Track Inspection
+        if let videoTrack = try? await asset.loadTracks(withMediaType: .video).first {
+            if let size = try? await videoTrack.load(.naturalSize) {
+                self.videoResolution = size
+            }
+            if let fps = try? await videoTrack.load(.nominalFrameRate) {
+                self.videoFrameRate = fps
+            }
+            if let formatDescriptions = try? await videoTrack.load(.formatDescriptions),
+               let desc = formatDescriptions.first {
+                let mediaSubType = CMFormatDescriptionGetMediaSubType(desc)
+                switch mediaSubType {
+                case kCMVideoCodecType_HEVC, kCMVideoCodecType_HEVCWithAlpha:
+                    self.videoCodecName = "Apple HEVC / H.265"
+                case kCMVideoCodecType_H264:
+                    self.videoCodecName = "H.264 / AVC"
+                case kCMVideoCodecType_AppleProRes422, kCMVideoCodecType_AppleProRes4444:
+                    self.videoCodecName = "Apple ProRes"
+                default:
+                    self.videoCodecName = "Hardware Accelerated"
+                }
+            }
+        }
+        
+        if let assetDuration = try? await asset.load(.duration) {
+            let durSec = CMTimeGetSeconds(assetDuration)
+            if durSec.isFinite && durSec > 0 {
+                self.videoDurationSeconds = durSec
+            }
+        }
         
         // Zero-copy direct hardware fast path:
         // If muted, construct a pure video-only composition so coreaudiod NEVER claims
@@ -118,14 +156,73 @@ public final class VideoEngine: NSObject {
         self.player.automaticallyWaitsToMinimizeStalling = false
         self.player.defaultRate = Float(playbackSpeed)
         
+        // Precision Trimming & Looper Setup
+        let settings = AppSettings.shared
+        let fullDuration = self.videoDurationSeconds
+        var loopRange: CMTimeRange = .invalid
+        if settings.trimEndTime > settings.trimStartTime && settings.trimEndTime <= fullDuration {
+            let start = CMTime(seconds: settings.trimStartTime, preferredTimescale: 600)
+            let dur = CMTime(seconds: settings.trimEndTime - settings.trimStartTime, preferredTimescale: 600)
+            loopRange = CMTimeRange(start: start, duration: dur)
+        } else if settings.trimStartTime > 0 && settings.trimStartTime < fullDuration {
+            let start = CMTime(seconds: settings.trimStartTime, preferredTimescale: 600)
+            let dur = CMTime(seconds: fullDuration - settings.trimStartTime, preferredTimescale: 600)
+            loopRange = CMTimeRange(start: start, duration: dur)
+        }
+        
         // First-party Apple Silicon hardware-accelerated looping
-        self.playerLooper = AVPlayerLooper(player: self.player, templateItem: playerItem)
+        if loopRange.isValid && !loopRange.isEmpty {
+            self.playerLooper = AVPlayerLooper(player: self.player, templateItem: playerItem, timeRange: loopRange)
+        } else {
+            self.playerLooper = AVPlayerLooper(player: self.player, templateItem: playerItem)
+        }
         
         if time > .zero {
             await player.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero)
+        } else if loopRange.isValid {
+            await player.seek(to: loopRange.start, toleranceBefore: .zero, toleranceAfter: .zero)
         }
         
         self.isBufferReleased = false
+    }
+    
+    public func reconfigureTrimming() async {
+        guard let item = currentItem else { return }
+        let settings = AppSettings.shared
+        let fullDuration = self.videoDurationSeconds
+        
+        var loopRange: CMTimeRange = .invalid
+        if settings.trimEndTime > settings.trimStartTime && settings.trimEndTime <= fullDuration {
+            let start = CMTime(seconds: settings.trimStartTime, preferredTimescale: 600)
+            let dur = CMTime(seconds: settings.trimEndTime - settings.trimStartTime, preferredTimescale: 600)
+            loopRange = CMTimeRange(start: start, duration: dur)
+        } else if settings.trimStartTime > 0 && settings.trimStartTime < fullDuration {
+            let start = CMTime(seconds: settings.trimStartTime, preferredTimescale: 600)
+            let dur = CMTime(seconds: fullDuration - settings.trimStartTime, preferredTimescale: 600)
+            loopRange = CMTimeRange(start: start, duration: dur)
+        }
+        
+        playerLooper?.disableLooping()
+        if loopRange.isValid && !loopRange.isEmpty {
+            self.playerLooper = AVPlayerLooper(player: self.player, templateItem: item, timeRange: loopRange)
+            await player.seek(to: loopRange.start, toleranceBefore: .zero, toleranceAfter: .zero)
+        } else {
+            self.playerLooper = AVPlayerLooper(player: self.player, templateItem: item)
+        }
+    }
+    
+    public func generateThumbnail(at seconds: Double) async -> NSImage? {
+        guard let asset = currentAsset else { return nil }
+        let generator = AVAssetImageGenerator(asset: asset)
+        generator.appliesPreferredTrackTransform = true
+        generator.maximumSize = CGSize(width: 480, height: 270)
+        generator.requestedTimeToleranceBefore = CMTime(seconds: 0.1, preferredTimescale: 600)
+        generator.requestedTimeToleranceAfter = CMTime(seconds: 0.1, preferredTimescale: 600)
+        let time = CMTime(seconds: seconds, preferredTimescale: 600)
+        if let cgImage = try? generator.copyCGImage(at: time, actualTime: nil) {
+            return NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
+        }
+        return nil
     }
     
     private func makeFramerateComposition(for asset: AVAsset, fps: Int) async -> AVVideoComposition? {

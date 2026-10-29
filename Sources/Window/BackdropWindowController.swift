@@ -17,6 +17,7 @@ public final class BackdropWindowController: NSWindowController {
     
     public let playerView: VideoPlayerView
     public let webView: WebBackdropView
+    public let metalView: MetalBackdropView
     public let particleView: ParticleOverlayView
     
     // Per-monitor independent spring physics (zero multi-monitor coordinate jumping)
@@ -67,6 +68,13 @@ public final class BackdropWindowController: NSWindowController {
         self.webView = wView
         bgPlane.addSubview(wView)
         
+        // Native Metal 4 Compute Shader View (Inside Background Plane)
+        let mView = MetalBackdropView(frame: screenBounds)
+        mView.autoresizingMask = [.width, .height]
+        mView.isHidden = true
+        self.metalView = mView
+        bgPlane.addSubview(mView)
+        
         // Foreground Depth Plane (Particles floating in front of screen)
         let fgPlane = NSView(frame: screenBounds)
         fgPlane.wantsLayer = true
@@ -116,15 +124,29 @@ public final class BackdropWindowController: NSWindowController {
             playerView.isHidden = false
             webView.isHidden = true
             webView.pause()
+            metalView.isHidden = true
+            metalView.pause()
             updateParticleOverlay()
             
             if PlaybackCoordinator.shared.resourceMonitor.activePauseReasons.isEmpty {
                 PlaybackCoordinator.shared.play()
             }
             
+        case .metal:
+            backgroundPlane.layer?.backgroundColor = NSColor.clear.cgColor
+            playerView.isHidden = true
+            webView.isHidden = true
+            webView.pause()
+            metalView.isHidden = false
+            metalView.resume()
+            PlaybackCoordinator.shared.pause()
+            updateParticleOverlay()
+            
         case .web:
             backgroundPlane.layer?.backgroundColor = NSColor.clear.cgColor
             playerView.isHidden = true
+            metalView.isHidden = true
+            metalView.pause()
             webView.isHidden = false
             PlaybackCoordinator.shared.pause()
             
@@ -142,6 +164,8 @@ public final class BackdropWindowController: NSWindowController {
             playerView.isHidden = true
             webView.isHidden = true
             webView.pause()
+            metalView.isHidden = true
+            metalView.pause()
             PlaybackCoordinator.shared.pause()
             
             particleView.isHidden = false
@@ -181,7 +205,10 @@ public final class BackdropWindowController: NSWindowController {
             dimming: settings.dimmingAmount,
             blur: settings.blurRadius,
             saturation: settings.saturationAmount,
-            contrast: settings.contrastAmount
+            contrast: settings.contrastAmount,
+            vignette: settings.vignetteAmount,
+            exposure: settings.exposureAmount,
+            widgetReadability: settings.widgetReadabilityMode
         )
     }
     
@@ -344,6 +371,11 @@ public final class BackdropWindowController: NSWindowController {
             webView.updateMousePosition(normalizedX: normX, normalizedY: normY, point: mouseLocation)
         }
         
+        // 4. Forward to Metal Compute Shader if active
+        if !metalView.isHidden {
+            metalView.updateMousePosition(normalized: CGPoint(x: normX * 0.5 + 0.5, y: normY * 0.5 + 0.5))
+        }
+        
         CATransaction.commit()
     }
     
@@ -388,6 +420,7 @@ public final class BackdropWindowController: NSWindowController {
         
         playerView.frame = newBounds
         webView.frame = newBounds
+        metalView.frame = newBounds
         particleView.frame = newBounds
         
         resetTransforms()
@@ -428,27 +461,32 @@ public final class BackdropWindowController: NSWindowController {
         if visible {
             window.orderFrontRegardless()
             if !webView.isHidden { webView.resume() }
+            if !metalView.isHidden { metalView.resume() }
             if !particleView.isHidden { particleView.resume() }
         } else {
             window.orderOut(nil)
             if !webView.isHidden { webView.pause() }
+            if !metalView.isHidden { metalView.pause() }
             if !particleView.isHidden { particleView.pause() }
         }
     }
     
     public func pauseInteractiveLayers() {
         webView.pause()
+        metalView.pause()
         particleView.pause()
     }
     
     public func resumeInteractiveLayers() {
         if !webView.isHidden { webView.resume() }
+        if !metalView.isHidden { metalView.resume() }
         if !particleView.isHidden { particleView.resume() }
     }
     
     public func tearDown() {
         detachPlayer()
         webView.pause()
+        metalView.pause()
         particleView.pause()
         window?.orderOut(nil)
         window?.close()

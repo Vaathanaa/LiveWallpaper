@@ -9,6 +9,7 @@ public final class VideoPlayerView: NSView {
     }
     
     private let dimmingOverlayLayer = CALayer()
+    private let readabilityGradientLayer = CAGradientLayer()
     
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -35,11 +36,30 @@ public final class VideoPlayerView: NSView {
             "hidden": NSNull()
         ]
         layer?.addSublayer(dimmingOverlayLayer)
+        
+        // Widget Readability Cushion: Soft ambient gradient for menu bar and desktop widgets
+        readabilityGradientLayer.colors = [
+            NSColor.black.withAlphaComponent(0.35).cgColor,
+            NSColor.clear.cgColor,
+            NSColor.clear.cgColor,
+            NSColor.black.withAlphaComponent(0.40).cgColor
+        ]
+        readabilityGradientLayer.locations = [0.0, 0.08, 0.88, 1.0]
+        readabilityGradientLayer.opacity = 0.0
+        readabilityGradientLayer.isHidden = true
+        readabilityGradientLayer.actions = [
+            "opacity": NSNull(),
+            "bounds": NSNull(),
+            "position": NSNull(),
+            "hidden": NSNull()
+        ]
+        layer?.addSublayer(readabilityGradientLayer)
     }
     
     public override func layout() {
         super.layout()
         dimmingOverlayLayer.frame = bounds
+        readabilityGradientLayer.frame = bounds
     }
     
     public override func makeBackingLayer() -> CALayer {
@@ -98,6 +118,27 @@ public final class VideoPlayerView: NSView {
             CATransaction.setDisableActions(true)
             playerLayer.contents = cgImage
             CATransaction.commit()
+            
+            WallpaperColorHarmony.shared.extractPalette(from: cgImage)
+        }
+    }
+    
+    public func refreshDominantColor() {
+        guard let player = playerLayer.player,
+              let item = player.currentItem else { return }
+        let asset = item.asset
+        let time = player.currentTime()
+        let generator = AVAssetImageGenerator(asset: asset)
+        generator.appliesPreferredTrackTransform = true
+        generator.requestedTimeToleranceBefore = CMTime(seconds: 0.1, preferredTimescale: 600)
+        generator.requestedTimeToleranceAfter = CMTime(seconds: 0.1, preferredTimescale: 600)
+        
+        Task.detached(priority: .utility) {
+            if let cgImage = try? generator.copyCGImage(at: time, actualTime: nil) {
+                await MainActor.run {
+                    WallpaperColorHarmony.shared.extractPalette(from: cgImage)
+                }
+            }
         }
     }
     
@@ -112,11 +153,23 @@ public final class VideoPlayerView: NSView {
         playerLayer.videoGravity = gravity
     }
     
-    public func applyFilters(dimming: Double, blur: Double, saturation: Double, contrast: Double) {
-        // Dimming overlay (hide completely when 0 to bypass compositing pass)
+    public func applyFilters(
+        dimming: Double,
+        blur: Double,
+        saturation: Double,
+        contrast: Double,
+        vignette: Double = 0.0,
+        exposure: Double = 0.0,
+        widgetReadability: Bool = false
+    ) {
+        // Dimming overlay
         let clampedDim = max(0.0, min(0.9, dimming))
         dimmingOverlayLayer.opacity = Float(clampedDim)
         dimmingOverlayLayer.isHidden = (clampedDim <= 0.001)
+        
+        // Widget Readability Cushion
+        readabilityGradientLayer.opacity = widgetReadability ? 1.0 : 0.0
+        readabilityGradientLayer.isHidden = !widgetReadability
         
         // CoreImage post-processing filters
         var filters: [CIFilter] = []
@@ -126,6 +179,21 @@ public final class VideoPlayerView: NSView {
                 colorFilter.setValue(saturation, forKey: kCIInputSaturationKey)
                 colorFilter.setValue(contrast, forKey: kCIInputContrastKey)
                 filters.append(colorFilter)
+            }
+        }
+        
+        if exposure != 0.0 {
+            if let expFilter = CIFilter(name: "CIExposureAdjust") {
+                expFilter.setValue(exposure, forKey: kCIInputEVKey)
+                filters.append(expFilter)
+            }
+        }
+        
+        if vignette > 0.01 {
+            if let vigFilter = CIFilter(name: "CIVignette") {
+                vigFilter.setValue(vignette * 2.0, forKey: kCIInputIntensityKey)
+                vigFilter.setValue(2.0, forKey: kCIInputRadiusKey)
+                filters.append(vigFilter)
             }
         }
         

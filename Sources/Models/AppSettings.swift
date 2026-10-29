@@ -86,11 +86,21 @@ public enum HeavyAppPauseScope: String, CaseIterable, Identifiable, Codable {
     public var id: String { rawValue }
 }
 
-// MARK: - Interactive Content Types (Web / Shaders / Particles)
+// MARK: - Interactive Content Types (Web / Metal / Particles)
 public enum WallpaperContentType: String, CaseIterable, Identifiable, Codable {
     case video = "Video File (.mp4, .mov)"
+    case metal = "Native Metal 4 Compute Shaders"
     case web = "Web / HTML / Shaders (WebKit)"
     case particles = "Interactive Procedural Particles"
+    
+    public var id: String { rawValue }
+}
+
+public enum MetalShaderPreset: String, CaseIterable, Identifiable, Codable {
+    case nebula = "Deep Space Cosmic Nebula"
+    case matrix = "Cyberpunk Digital Rain"
+    case fluid = "Minimalist Liquid Fluid"
+    case aurora = "Atmospheric Northern Aurora"
     
     public var id: String { rawValue }
 }
@@ -277,6 +287,48 @@ public final class AppSettings: ObservableObject {
         didSet { defaults.set(contrastAmount, forKey: "contrastAmount") }
     }
     
+    // MARK: - Atmosphere & Color Grading Studio
+    
+    @Published public var vignetteAmount: Double {
+        didSet { defaults.set(vignetteAmount, forKey: "vignetteAmount") }
+    }
+    
+    @Published public var exposureAmount: Double {
+        didSet { defaults.set(exposureAmount, forKey: "exposureAmount") }
+    }
+    
+    @Published public var widgetReadabilityMode: Bool {
+        didSet { defaults.set(widgetReadabilityMode, forKey: "widgetReadabilityMode") }
+    }
+    
+    // MARK: - Auto-Looping & Trimming Magic
+    
+    @Published public var isAutoLoopCrossfadeEnabled: Bool {
+        didSet { defaults.set(isAutoLoopCrossfadeEnabled, forKey: "isAutoLoopCrossfadeEnabled") }
+    }
+    
+    @Published public var crossfadeDuration: Double {
+        didSet { defaults.set(crossfadeDuration, forKey: "crossfadeDuration") }
+    }
+    
+    @Published public var isPingPongLoopEnabled: Bool {
+        didSet { defaults.set(isPingPongLoopEnabled, forKey: "isPingPongLoopEnabled") }
+    }
+    
+    @Published public var trimStartTime: Double {
+        didSet { defaults.set(trimStartTime, forKey: "trimStartTime") }
+    }
+    
+    @Published public var trimEndTime: Double {
+        didSet { defaults.set(trimEndTime, forKey: "trimEndTime") }
+    }
+    
+    // MARK: - Dynamic Color Harmony
+    
+    @Published public var dynamicAccentColorHex: String {
+        didSet { defaults.set(dynamicAccentColorHex, forKey: "dynamicAccentColorHex") }
+    }
+    
     // MARK: - Smart Battery Profiles & MagSafe Adaptivity
     
     @Published public var isAdaptiveFramerateEnabled: Bool {
@@ -299,6 +351,10 @@ public final class AppSettings: ObservableObject {
     
     @Published public var contentType: WallpaperContentType {
         didSet { defaults.set(contentType.rawValue, forKey: "contentType") }
+    }
+    
+    @Published public var metalPreset: MetalShaderPreset {
+        didSet { defaults.set(metalPreset.rawValue, forKey: "metalPreset") }
     }
     
     @Published public var webURLString: String? {
@@ -423,6 +479,19 @@ public final class AppSettings: ObservableObject {
         self.saturationAmount = defaults.object(forKey: "saturationAmount") as? Double ?? 1.0
         self.contrastAmount = defaults.object(forKey: "contrastAmount") as? Double ?? 1.0
         
+        // Atmosphere & Color Grading Studio
+        self.vignetteAmount = defaults.object(forKey: "vignetteAmount") as? Double ?? 0.0
+        self.exposureAmount = defaults.object(forKey: "exposureAmount") as? Double ?? 0.0
+        self.widgetReadabilityMode = defaults.object(forKey: "widgetReadabilityMode") as? Bool ?? true
+        
+        // Auto-Looping & Trimming Magic
+        self.isAutoLoopCrossfadeEnabled = defaults.bool(forKey: "isAutoLoopCrossfadeEnabled")
+        self.crossfadeDuration = defaults.object(forKey: "crossfadeDuration") as? Double ?? 1.5
+        self.isPingPongLoopEnabled = defaults.bool(forKey: "isPingPongLoopEnabled")
+        self.trimStartTime = defaults.object(forKey: "trimStartTime") as? Double ?? 0.0
+        self.trimEndTime = defaults.object(forKey: "trimEndTime") as? Double ?? 0.0
+        self.dynamicAccentColorHex = defaults.string(forKey: "dynamicAccentColorHex") ?? "#007AFF"
+        
         // Smart Battery Profiles
         self.isAdaptiveFramerateEnabled = defaults.object(forKey: "isAdaptiveFramerateEnabled") as? Bool ?? true
         let savedAcFPS = defaults.object(forKey: "acFramerate") as? Int
@@ -434,6 +503,7 @@ public final class AppSettings: ObservableObject {
         
         // Interactive Content Types
         self.contentType = defaults.string(forKey: "contentType").flatMap(WallpaperContentType.init) ?? .video
+        self.metalPreset = defaults.string(forKey: "metalPreset").flatMap(MetalShaderPreset.init) ?? .nebula
         self.webURLString = defaults.string(forKey: "webURLString")
         self.selectedWebPreset = defaults.string(forKey: "selectedWebPreset") ?? "Cyberpunk Matrix"
         
