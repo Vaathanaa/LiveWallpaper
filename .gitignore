@@ -1,0 +1,24 @@
+# Swift Package Manager & Build Artifacts
+.build/
+.swiftpm/
+DerivedData/
+xcuserdata/
+*.xcworkspace
+*.xcuserstate
+
+# Local Built App Bundles
+VideoBackdrop.app/
+
+# macOS System & Metadata Files
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+
+# Temporary & Editor files
+*.swp
+*~
+*.bak
+.vscode/
+.idea/
