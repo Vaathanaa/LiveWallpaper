@@ -2,8 +2,8 @@ import ScreenSaver
 import AVFoundation
 import AppKit
 
-@objc(VideoBackdropScreenSaverView)
-public class VideoBackdropScreenSaverView: ScreenSaverView {
+@objc(LiveWallpaperScreenSaverView)
+public class LiveWallpaperScreenSaverView: ScreenSaverView {
     
     private var player: AVQueuePlayer?
     private var playerLooper: AVPlayerLooper?
@@ -29,7 +29,7 @@ public class VideoBackdropScreenSaverView: ScreenSaverView {
         guard let layer = self.layer else { return }
         
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        let dir = appSupport.appendingPathComponent("VideoBackdrop", isDirectory: true)
+        let dir = appSupport.appendingPathComponent("LiveWallpaper", isDirectory: true)
         let localVideo = dir.appendingPathComponent("current_wallpaper.mp4")
         let posterImage = dir.appendingPathComponent("lockscreen_poster.jpg")
         
@@ -45,7 +45,7 @@ public class VideoBackdropScreenSaverView: ScreenSaverView {
         if FileManager.default.fileExists(atPath: localVideo.path) {
             targetURL = localVideo
         } else {
-            let defaults = UserDefaults(suiteName: "com.local.VideoBackdrop")
+            let defaults = UserDefaults(suiteName: "com.local.LiveWallpaper")
             if let path = defaults?.string(forKey: "videoPath"), FileManager.default.fileExists(atPath: path) {
                 targetURL = URL(fileURLWithPath: path)
             } else {

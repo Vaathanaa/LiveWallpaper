@@ -5,13 +5,13 @@
     <key>CFBundleDevelopmentRegion</key>
     <string>en</string>
     <key>CFBundleExecutable</key>
-    <string>VideoBackdrop</string>
+    <string>LiveWallpaper</string>
     <key>CFBundleIdentifier</key>
-    <string>com.local.VideoBackdrop</string>
+    <string>com.local.LiveWallpaper</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
-    <string>VideoBackdrop</string>
+    <string>LiveWallpaper</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
@@ -44,5 +44,7 @@
     <true/>
     <key>NSSupportsAutomaticGraphicsSwitching</key>
     <true/>
+    <key>NSHumanReadableCopyright</key>
+    <string>Copyright © 2026 LiveWallpaper. All rights reserved.</string>
 </dict>
 </plist>

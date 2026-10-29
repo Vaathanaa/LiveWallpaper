@@ -44,7 +44,7 @@ public final class StatusMenuController: NSObject, NSMenuDelegate {
     
     private let launchAtLoginItem = NSMenuItem(title: "Launch at Login", action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
     private let settingsItem = NSMenuItem(title: "Settings...", action: #selector(openSettings), keyEquivalent: ",")
-    private let quitItem = NSMenuItem(title: "Quit VideoBackdrop", action: #selector(quitApp), keyEquivalent: "q")
+    private let quitItem = NSMenuItem(title: "Quit LiveWallpaper", action: #selector(quitApp), keyEquivalent: "q")
     
     private let speedOptions: [Double] = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0]
     
@@ -58,13 +58,13 @@ public final class StatusMenuController: NSObject, NSMenuDelegate {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = statusItem.button {
             let symbolConfig = NSImage.SymbolConfiguration(pointSize: 14, weight: .medium)
-            if let image = NSImage(systemSymbolName: "play.desktopcomputer", accessibilityDescription: "VideoBackdrop")?
+            if let image = NSImage(systemSymbolName: "play.desktopcomputer", accessibilityDescription: "LiveWallpaper")?
                 .withSymbolConfiguration(symbolConfig) {
                 image.isTemplate = true
                 button.image = image
             }
             button.imagePosition = .imageOnly
-            button.toolTip = "VideoBackdrop — Live Desktop Wallpaper"
+            button.toolTip = "LiveWallpaper — Ultra-Smooth Live Desktop"
         }
         statusItem.menu = menu
         menu.delegate = self

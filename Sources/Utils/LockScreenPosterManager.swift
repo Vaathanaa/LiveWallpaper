@@ -27,7 +27,7 @@ public final class LockScreenPosterManager {
     
     public func updateLockScreenPoster(for asset: AVAsset, at time: CMTime = .zero) {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        let dir = appSupport.appendingPathComponent("VideoBackdrop", isDirectory: true)
+        let dir = appSupport.appendingPathComponent("LiveWallpaper", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         
         // Use a permanent, stable URL so every macOS virtual desktop/Space always has a valid file on disk
@@ -98,7 +98,7 @@ public final class LockScreenPosterManager {
     /// Synchronizes the active video directly to macOS's native 120Hz Screen Saver
     public func syncScreenSaverVideo(from sourceURL: URL, asset: AVAsset) {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        let dir = appSupport.appendingPathComponent("VideoBackdrop", isDirectory: true)
+        let dir = appSupport.appendingPathComponent("LiveWallpaper", isDirectory: true)
         let localVideo = dir.appendingPathComponent("current_wallpaper.mp4")
         
         let home = FileManager.default.homeDirectoryForCurrentUser
@@ -114,7 +114,7 @@ public final class LockScreenPosterManager {
                 try FileManager.default.createDirectory(at: aerialVideosDir, withIntermediateDirectories: true)
                 try FileManager.default.createDirectory(at: aerialThumbDir, withIntermediateDirectories: true)
                 
-                // Keep local video updated for VideoBackdrop.saver
+                // Keep local video updated for LiveWallpaper.saver
                 if FileManager.default.fileExists(atPath: localVideo.path) {
                     try? FileManager.default.removeItem(at: localVideo)
                 }

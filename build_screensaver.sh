@@ -1,20 +1,20 @@
 #!/bin/bash
 set -e
 
-PROJECT_DIR="/Users/vaathanaa007/.gemini/antigravity/scratch/VideoBackdrop"
-SAVER_BUNDLE="$HOME/Library/Screen Savers/VideoBackdrop.saver"
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SAVER_BUNDLE="$HOME/Library/Screen Savers/LiveWallpaper.saver"
 
-echo "==> Compiling VideoBackdrop.saver (Screen Saver)..."
+echo "==> Compiling LiveWallpaper.saver (Native Screen Saver)..."
 mkdir -p "$SAVER_BUNDLE/Contents/MacOS"
 
-swiftc -emit-library "$PROJECT_DIR/ScreenSaver/VideoBackdropScreenSaverView.swift" \
-  -module-name VideoBackdropScreenSaver \
+swiftc -emit-library "$PROJECT_DIR/ScreenSaver/LiveWallpaperScreenSaverView.swift" \
+  -module-name LiveWallpaperScreenSaver \
   -framework ScreenSaver \
   -framework AVFoundation \
   -framework AppKit \
   -target arm64-apple-macos13.0 \
   -O \
-  -o "$SAVER_BUNDLE/Contents/MacOS/VideoBackdropScreenSaver"
+  -o "$SAVER_BUNDLE/Contents/MacOS/LiveWallpaperScreenSaver"
 
 cat << 'EOF' > "$SAVER_BUNDLE/Contents/Info.plist"
 <?xml version="1.0" encoding="UTF-8"?>
@@ -24,13 +24,13 @@ cat << 'EOF' > "$SAVER_BUNDLE/Contents/Info.plist"
     <key>CFBundleDevelopmentRegion</key>
     <string>en</string>
     <key>CFBundleExecutable</key>
-    <string>VideoBackdropScreenSaver</string>
+    <string>LiveWallpaperScreenSaver</string>
     <key>CFBundleIdentifier</key>
-    <string>com.local.VideoBackdrop.ScreenSaver</string>
+    <string>com.local.LiveWallpaper.ScreenSaver</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
-    <string>VideoBackdrop</string>
+    <string>LiveWallpaper</string>
     <key>CFBundlePackageType</key>
     <string>BNDL</string>
     <key>CFBundleShortVersionString</key>
@@ -38,10 +38,10 @@ cat << 'EOF' > "$SAVER_BUNDLE/Contents/Info.plist"
     <key>CFBundleVersion</key>
     <string>1</string>
     <key>NSPrincipalClass</key>
-    <string>VideoBackdropScreenSaverView</string>
+    <string>LiveWallpaperScreenSaverView</string>
 </dict>
 </plist>
 EOF
 
-codesign --force --deep --sign - "$SAVER_BUNDLE"
-echo "==> VideoBackdrop.saver built and signed successfully at $SAVER_BUNDLE"
+codesign --force --deep --sign - --options runtime "$SAVER_BUNDLE"
+echo "==> LiveWallpaper.saver built and signed successfully at $SAVER_BUNDLE"

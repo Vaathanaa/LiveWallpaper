@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct VideoBackdropApp: App {
+struct LiveWallpaperApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     
     var body: some Scene {

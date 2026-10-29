@@ -2,16 +2,16 @@
 import PackageDescription
 
 let package = Package(
-    name: "VideoBackdrop",
+    name: "LiveWallpaper",
     platforms: [
         .macOS(.v13)
     ],
     products: [
-        .executable(name: "VideoBackdrop", targets: ["VideoBackdrop"])
+        .executable(name: "LiveWallpaper", targets: ["LiveWallpaper"])
     ],
     targets: [
         .executableTarget(
-            name: "VideoBackdrop",
+            name: "LiveWallpaper",
             path: "Sources"
         )
     ]

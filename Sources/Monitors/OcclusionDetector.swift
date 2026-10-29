@@ -120,7 +120,7 @@ public final class OcclusionDetector {
                     "Window Server", "Dock", "Wallpaper", "Finder",
                     "screencaptureui", "screencapture", "Screenshot",
                     "QuickTime Player", "ControlCenter", "SystemUIServer",
-                    "NotificationCenter", "VideoBackdrop"
+                    "NotificationCenter", "LiveWallpaper", "VideoBackdrop"
                 ]
                 if ignoredSystemOwners.contains(owner) {
                     continue

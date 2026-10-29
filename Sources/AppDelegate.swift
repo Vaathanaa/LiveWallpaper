@@ -27,14 +27,14 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, StatusMenuContr
         
         setupRemoteCommands()
         
-        NSLog("[VideoBackdrop] Launched successfully.")
+        NSLog("[LiveWallpaper] Launched successfully.")
     }
     
     private func setupRemoteCommands() {
         let center = DistributedNotificationCenter.default()
         
         center.addObserver(
-            forName: NSNotification.Name("com.local.VideoBackdrop.loadVideo"),
+            forName: NSNotification.Name("com.local.LiveWallpaper.loadVideo"),
             object: nil,
             queue: .main
         ) { notification in
@@ -52,7 +52,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, StatusMenuContr
         }
         
         center.addObserver(
-            forName: NSNotification.Name("com.local.VideoBackdrop.setMode"),
+            forName: NSNotification.Name("com.local.LiveWallpaper.setMode"),
             object: nil,
             queue: .main
         ) { notification in
@@ -82,7 +82,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, StatusMenuContr
         }
         
         center.addObserver(
-            forName: NSNotification.Name("com.local.VideoBackdrop.togglePlayPause"),
+            forName: NSNotification.Name("com.local.LiveWallpaper.togglePlayPause"),
             object: nil,
             queue: .main
         ) { _ in
@@ -92,7 +92,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, StatusMenuContr
         }
         
         center.addObserver(
-            forName: NSNotification.Name("com.local.VideoBackdrop.pause"),
+            forName: NSNotification.Name("com.local.LiveWallpaper.pause"),
             object: nil,
             queue: .main
         ) { _ in
@@ -103,7 +103,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, StatusMenuContr
         }
         
         center.addObserver(
-            forName: NSNotification.Name("com.local.VideoBackdrop.play"),
+            forName: NSNotification.Name("com.local.LiveWallpaper.play"),
             object: nil,
             queue: .main
         ) { _ in
@@ -121,7 +121,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, StatusMenuContr
     }
     
     public func applicationWillTerminate(_ notification: Notification) {
-        NSLog("[VideoBackdrop] Terminating: restoring static desktop wallpaper.")
+        NSLog("[LiveWallpaper] Terminating: restoring static desktop wallpaper.")
         PlaybackCoordinator.shared.tearDown()
         WindowManager.shared.tearDown()
         
@@ -139,7 +139,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, StatusMenuContr
             let hostingController = NSHostingController(rootView: settingsView)
             
             let window = NSWindow(contentViewController: hostingController)
-            window.title = "VideoBackdrop Settings"
+            window.title = "LiveWallpaper Settings"
             window.styleMask = [.titled, .closable, .miniaturizable]
             window.isReleasedWhenClosed = false
             window.center()

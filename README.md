@@ -1,8 +1,4 @@
-# VideoBackdrop
-
-<p align="center">
-  <img src="Resources/AppIcon.png" alt="VideoBackdrop Logo" width="128" height="128" onerror="this.style.display='none'"/>
-</p>
+# LiveWallpaper
 
 <p align="center">
   <strong>Ultra-efficient, buttery-smooth Live Video Wallpaper & Interactive Backdrop for macOS.</strong><br>
@@ -13,7 +9,8 @@
   <img src="https://img.shields.io/badge/Platform-macOS%2013%2B-blue?style=flat-square&logo=apple" alt="macOS 13+"/>
   <img src="https://img.shields.io/badge/Architecture-Apple%20Silicon%20(arm64)-orange?style=flat-square" alt="Apple Silicon"/>
   <img src="https://img.shields.io/badge/Swift-5.9%2B%20%2F%206.0-red?style=flat-square&logo=swift" alt="Swift"/>
-  <img src="https://img.shields.io/badge/Dependencies-Zero%20(Pure%20Apple%20Frameworks)-green?style=flat-square" alt="Zero Dependencies"/>
+  <img src="https://img.shields.io/badge/Security-Hardened%20Runtime%20%26%20Sandbox%20Ready-success?style=flat-square&logo=apple" alt="Security"/>
+  <img src="https://img.shields.io/badge/Privacy-Zero%20Telemetry%20%2F%20100%25%20Local-green?style=flat-square" alt="Privacy"/>
   <img src="https://img.shields.io/badge/License-MIT-purple?style=flat-square" alt="MIT License"/>
 </p>
 
@@ -21,7 +18,7 @@
 
 ## 🌟 Highlights & Key Features
 
-- ⚡ **Zero-Copy Hardware VideoToolbox Decode**: Decodes H.264 & HEVC directly on Apple Silicon Media Engines. Sustains smooth 60fps, 120fps (ProMotion), and high-refresh external monitors (up to 200Hz+) with low CPU footprint.
+- ⚡ **Zero-Copy Hardware VideoToolbox Decode**: Decodes H.264 & HEVC directly on Apple Silicon Media Engines. Sustains smooth 60fps, 120fps (ProMotion), and high-refresh external monitors (up to 200Hz+) with minimal CPU footprint.
 - ❄️ **Instant Freeze-Frame Pause**: Pausing never clears your screen or flashes black. It instantly captures and freezes the exact video frame as a crisp, static desktop picture.
 - 📱 **Zero-Glitch iPhone Mirroring & PiP**: Engineered with non-exclusive GPU composition (`playerLayer.opacity = 0.999`, `isOpaque = false`), permanently preventing hardware video overlay contention with macOS Sequoia's iPhone Mirroring and Picture-in-Picture windows on external monitors.
 - 🖥️ **Universal Multi-Display Architecture**:
@@ -37,7 +34,7 @@
   - Smooth spring-mass-damper physics with menu bar and hot-corner safety cushions.
   - Automatically rests when mouse is idle, dropping timer and CADisplayLink ticks to 0.
 - 🛡️ **Companion Screen Saver**:
-  - Includes `VideoBackdrop.saver` to synchronize your active video wallpaper directly with macOS's native lock screen and aerial screen saver.
+  - Includes `LiveWallpaper.saver` to synchronize your active video wallpaper directly with macOS's native lock screen and aerial screen saver.
 
 ---
 
@@ -48,43 +45,40 @@
 | **Operating System** | macOS 13.0 (Ventura), macOS 14.0 (Sonoma), macOS 15.0 (Sequoia), or later |
 | **Architecture** | Apple Silicon (`arm64`): M1, M2, M3, M4 (Base, Pro, Max, Ultra) |
 | **Toolchain** | Xcode 15+ / Swift 5.9+ |
-| **Dependencies** | **None** (Built exclusively using AVFoundation, AppKit, SwiftUI, QuartzCore, WebKit, and IOKit) |
+| **Security** | Built with Hardened Runtime and App Sandbox compatibility |
+| **Privacy** | 100% local execution — zero network requests, zero telemetry ([Privacy Policy](PRIVACY.md)) |
 
 ---
 
 ## 🚀 Quick Start & Installation
 
-### Option 1: One-Line Build & Run (Terminal)
+Detailed instructions are available in [INSTALL.md](INSTALL.md).
 
-Clone this repository and run the automated build script:
+### One-Line Build & Install to `/Applications`
 
 ```bash
-git clone https://github.com/your-username/VideoBackdrop.git
-cd VideoBackdrop
+git clone https://github.com/your-username/LiveWallpaper.git
+cd LiveWallpaper
 ./build_app.sh
 ```
 
-To install directly to `/Applications`:
+To launch immediately:
 
 ```bash
-cp -R VideoBackdrop.app /Applications/
-open /Applications/VideoBackdrop.app
+open /Applications/LiveWallpaper.app
 ```
 
-### Option 2: Install Companion Screen Saver
-
-To build and install the native macOS screen saver bundle:
+### Install Companion Screen Saver
 
 ```bash
 ./build_screensaver.sh
 ```
-The screen saver will be placed in `~/Library/Screen Savers/VideoBackdrop.saver` and will appear in **System Settings > Wallpaper / Screen Saver**.
 
 ---
 
 ## 🎮 Usage & Controls
 
-Once launched, VideoBackdrop lives as a lightweight icon in your macOS menu bar (`play.desktopcomputer`):
+Once launched, LiveWallpaper lives as a lightweight icon in your macOS menu bar (`play.desktopcomputer`):
 
 - **Live Mini-Player Card**: Real-time thumbnail preview, timeline scrubber, and status badges.
 - **Play / Pause (`⌘P`)**: Seamlessly freeze/resume playback.
@@ -101,59 +95,32 @@ Once launched, VideoBackdrop lives as a lightweight icon in your macOS menu bar 
 
 ## ⌨️ CLI & Automation Commands
 
-VideoBackdrop includes a built-in `DistributedNotificationCenter` IPC interface. You can script playback from Terminal, Raycast, Alfred, or Shortcuts:
+LiveWallpaper includes a built-in `DistributedNotificationCenter` IPC interface:
 
 ```bash
 # Toggle Play/Pause
-swift -e 'import Foundation; DistributedNotificationCenter.default().postNotificationName(NSNotification.Name("com.local.VideoBackdrop.togglePlayPause"), object: nil, deliverImmediately: true)'
+swift -e 'import Foundation; DistributedNotificationCenter.default().postNotificationName(NSNotification.Name("com.local.LiveWallpaper.togglePlayPause"), object: nil, deliverImmediately: true)'
 
 # Pause
-swift -e 'import Foundation; DistributedNotificationCenter.default().postNotificationName(NSNotification.Name("com.local.VideoBackdrop.pause"), object: nil, deliverImmediately: true)'
+swift -e 'import Foundation; DistributedNotificationCenter.default().postNotificationName(NSNotification.Name("com.local.LiveWallpaper.pause"), object: nil, deliverImmediately: true)'
 
 # Resume Play
-swift -e 'import Foundation; DistributedNotificationCenter.default().postNotificationName(NSNotification.Name("com.local.VideoBackdrop.play"), object: nil, deliverImmediately: true)'
+swift -e 'import Foundation; DistributedNotificationCenter.default().postNotificationName(NSNotification.Name("com.local.LiveWallpaper.play"), object: nil, deliverImmediately: true)'
 
 # Load a new video dynamically
-swift -e 'import Foundation; DistributedNotificationCenter.default().postNotificationName(NSNotification.Name("com.local.VideoBackdrop.loadVideo"), object: nil, userInfo: ["path": "/path/to/video.mp4"], deliverImmediately: true)'
+swift -e 'import Foundation; DistributedNotificationCenter.default().postNotificationName(NSNotification.Name("com.local.LiveWallpaper.loadVideo"), object: nil, userInfo: ["path": "/path/to/video.mp4"], deliverImmediately: true)'
 ```
 
 ---
 
-## 🔬 Architecture & Performance
+## 🔒 Security & Privacy Policy
 
-```
-+-------------------------------------------------------------+
-|                      macOS WindowServer                     |
-|                                                             |
-|  [Floating Windows / Apps] (Notes, Safari, iPhone Mirroring)|  Layer 0
-|  ---------------------------------------------------------  |
-|  [Desktop Icons & Widgets]                                  |  kCGDesktopIconWindowLevel
-|  ---------------------------------------------------------  |
-|  [BackdropWindow] (VideoBackdrop)                           |  kCGDesktopWindowLevel + 1
-|    * Window: isOpaque = false, backgroundColor = .clear     |
-|    * AVPlayerLayer: opacity = 0.999, isOpaque = false       |  (Metal GPU Compositor)
-|    * Zero direct-scanout plane collisions                   |
-|  ---------------------------------------------------------  |
-|  [Root Desktop Picture]                                     |  kCGDesktopWindowLevel
-+-------------------------------------------------------------+
-```
+LiveWallpaper is built with strict privacy compliance:
+- **Zero Telemetry**: No tracking, analytics, or remote logging.
+- **Sandboxed User File Access**: Reads only the files you pick via `NSOpenPanel`.
+- **No Intrusive Permissions**: No Accessibility, no Screen Recording, no Camera, no Mic.
 
-### Performance Targets
-- **CPU While Playing**: Under 3% on Apple Silicon M-series.
-- **CPU While Paused**: **0.0% to 2.4%** (idling in Mach traps).
-- **RAM**: Under 100 MB physical footprint.
-- **Power**: Automatically drops power assertions when audio is muted.
-
----
-
-## 🤝 Contributing
-
-Contributions, bug reports, and pull requests are welcome!
-1. Fork the Project
-2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the Branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+Read the full [Privacy Policy](PRIVACY.md).
 
 ---
 
