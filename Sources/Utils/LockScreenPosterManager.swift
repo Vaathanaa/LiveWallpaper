@@ -17,7 +17,7 @@ public final class LockScreenPosterManager {
         for screen in NSScreen.screens {
             let id = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID ?? 0
             if let url = NSWorkspace.shared.desktopImageURL(for: screen) {
-                if !url.path.contains("poster_") && !url.path.contains("lockscreen_poster") {
+                if !url.path.contains("poster_") && !url.path.contains("lockscreen_poster") && !url.path.contains("lockscreen.png") {
                     originalWallpapers[id] = url
                     defaults.set(url.path, forKey: "originalWallpaper_\(id)")
                 }
@@ -27,20 +27,22 @@ public final class LockScreenPosterManager {
     
     public func updateLockScreenPoster(for asset: AVAsset, at time: CMTime = .zero) {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        let dir = appSupport.appendingPathComponent("LiveWallpaper", isDirectory: true)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let liveWallpaperDir = appSupport.appendingPathComponent("LiveWallpaper", isDirectory: true)
+        let videoBackdropDir = appSupport.appendingPathComponent("VideoBackdrop", isDirectory: true)
         
-        // Use a permanent, stable URL so every macOS virtual desktop/Space always has a valid file on disk
-        let stableURL = dir.appendingPathComponent("lockscreen_poster.jpg")
+        try? FileManager.default.createDirectory(at: liveWallpaperDir, withIntermediateDirectories: true)
+        try? FileManager.default.createDirectory(at: videoBackdropDir, withIntermediateDirectories: true)
         
-        Task.detached(priority: .utility) {
+        let stableURL = liveWallpaperDir.appendingPathComponent("lockscreen_poster.jpg")
+        let backupStableURL = videoBackdropDir.appendingPathComponent("lockscreen_poster.jpg")
+        
+        Task.detached(priority: .userInitiated) {
             let gen = AVAssetImageGenerator(asset: asset)
             gen.appliesPreferredTrackTransform = true
             gen.maximumSize = CGSize(width: 3840, height: 2160)
             gen.requestedTimeToleranceBefore = CMTime(seconds: 0.1, preferredTimescale: 600)
             gen.requestedTimeToleranceAfter = CMTime(seconds: 0.1, preferredTimescale: 600)
             
-            // If requested at .zero, seek into the video slightly (1.0s) to avoid black fade-in frames
             var targetTime = time
             if targetTime <= .zero {
                 if let duration = try? await asset.load(.duration), CMTimeGetSeconds(duration) > 2.0 {
@@ -51,42 +53,65 @@ public final class LockScreenPosterManager {
             do {
                 let (cgImage, _) = try await gen.image(at: targetTime)
                 let rep = NSBitmapImageRep(cgImage: cgImage)
+                
+                // 1. Write high-quality JPEG poster for Application Support
                 if let jpegData = rep.representation(using: .jpeg, properties: [.compressionFactor: 0.95]) {
-                    try jpegData.write(to: stableURL, options: .atomic)
-                    
-                    await MainActor.run {
-                        let options: [NSWorkspace.DesktopImageOptionKey: Any] = [
-                            .allowClipping: true,
-                            .imageScaling: NSImageScaling.scaleProportionallyUpOrDown.rawValue
-                        ]
-                        
-                        for screen in NSScreen.screens {
-                            do {
-                                try NSWorkspace.shared.setDesktopImageURL(stableURL, for: screen, options: options)
-                            } catch {
-                                NSLog("[LockScreenPosterManager] Warning setting desktop image: \(error.localizedDescription)")
+                    try? jpegData.write(to: stableURL, options: .atomic)
+                    try? jpegData.write(to: backupStableURL, options: .atomic)
+                }
+                
+                // 2. CRITICAL for macOS Lock Screen: Write directly to /Library/Caches/Desktop Pictures/<user-uuid>/lockscreen.png
+                // This is the direct system cache that macOS loginwindow and _securityagent use to render the Lock Screen wallpaper.
+                if let pngData = rep.representation(using: .png, properties: [:]) {
+                    let systemCacheDir = "/Library/Caches/Desktop Pictures"
+                    if let items = try? FileManager.default.contentsOfDirectory(atPath: systemCacheDir) {
+                        for item in items {
+                            let userDir = (systemCacheDir as NSString).appendingPathComponent(item)
+                            var isDir: ObjCBool = false
+                            if FileManager.default.fileExists(atPath: userDir, isDirectory: &isDir), isDir.boolValue {
+                                let lockscreenPNG = (userDir as NSString).appendingPathComponent("lockscreen.png")
+                                try? pngData.write(to: URL(fileURLWithPath: lockscreenPNG), options: .atomic)
+                                NSLog("[LockScreenPosterManager] Successfully wrote macOS system lockscreen.png to: %@", lockscreenPNG)
                             }
                         }
-                        
-                        LockScreenPosterManager.shared.posterURL = stableURL
-                        NSLog("[LockScreenPosterManager] Synced permanent live video poster to all desktop spaces.")
+                    }
+                }
+                
+                // 3. Set desktop image via NSWorkspace
+                await MainActor.run {
+                    let options: [NSWorkspace.DesktopImageOptionKey: Any] = [
+                        .allowClipping: true,
+                        .imageScaling: NSImageScaling.scaleProportionallyUpOrDown.rawValue
+                    ]
+                    
+                    for screen in NSScreen.screens {
+                        do {
+                            try NSWorkspace.shared.setDesktopImageURL(stableURL, for: screen, options: options)
+                        } catch {
+                            NSLog("[LockScreenPosterManager] Warning setting desktop image: \(error.localizedDescription)")
+                        }
                     }
                     
-                    // Asynchronously notify System Events on background utility queue to never hitch MainActor
-                    DispatchQueue.global(qos: .utility).async {
-                        let pathString = stableURL.path.replacingOccurrences(of: "\"", with: "\\\"")
-                        let script = """
-                        tell application "System Events"
-                            set posterPath to POSIX file "\(pathString)"
-                            repeat with d in desktops
-                                set picture of d to posterPath
-                            end repeat
-                        end tell
-                        """
-                        if let appleScript = NSAppleScript(source: script) {
-                            var err: NSDictionary?
-                            appleScript.executeAndReturnError(&err)
-                        }
+                    LockScreenPosterManager.shared.posterURL = stableURL
+                }
+                
+                // 4. Update Index.plist for Desktop choices and gently signal WallpaperAgent
+                Self.updateIndexPlistForDesktop(stableURL: stableURL)
+                
+                // 5. Asynchronously notify System Events on background utility queue
+                DispatchQueue.global(qos: .utility).async {
+                    let pathString = stableURL.path.replacingOccurrences(of: "\"", with: "\\\"")
+                    let script = """
+                    tell application "System Events"
+                        set posterPath to POSIX file "\(pathString)"
+                        repeat with d in desktops
+                            set picture of d to posterPath
+                        end repeat
+                    end tell
+                    """
+                    if let appleScript = NSAppleScript(source: script) {
+                        var err: NSDictionary?
+                        appleScript.executeAndReturnError(&err)
                     }
                 }
             } catch {
@@ -98,8 +123,11 @@ public final class LockScreenPosterManager {
     /// Synchronizes the active video directly to macOS's native 120Hz Screen Saver
     public func syncScreenSaverVideo(from sourceURL: URL, asset: AVAsset) {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        let dir = appSupport.appendingPathComponent("LiveWallpaper", isDirectory: true)
-        let localVideo = dir.appendingPathComponent("current_wallpaper.mp4")
+        let liveWallpaperDir = appSupport.appendingPathComponent("LiveWallpaper", isDirectory: true)
+        let videoBackdropDir = appSupport.appendingPathComponent("VideoBackdrop", isDirectory: true)
+        
+        let localVideo1 = liveWallpaperDir.appendingPathComponent("current_wallpaper.mp4")
+        let localVideo2 = videoBackdropDir.appendingPathComponent("current_wallpaper.mp4")
         
         let home = FileManager.default.homeDirectoryForCurrentUser
         let aerialVideosDir = home.appendingPathComponent("Library/Application Support/com.apple.wallpaper/aerials/videos", isDirectory: true)
@@ -108,23 +136,30 @@ public final class LockScreenPosterManager {
         let targetMov = aerialVideosDir.appendingPathComponent("FF9CB826-41B2-4A5E-A0AA-D4842AA26511.mov")
         let targetThumb = aerialThumbDir.appendingPathComponent("FF9CB826-41B2-4A5E-A0AA-D4842AA26511.png")
         
-        Task.detached(priority: .utility) {
+        Task.detached(priority: .userInitiated) {
             do {
-                try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+                try FileManager.default.createDirectory(at: liveWallpaperDir, withIntermediateDirectories: true)
+                try FileManager.default.createDirectory(at: videoBackdropDir, withIntermediateDirectories: true)
                 try FileManager.default.createDirectory(at: aerialVideosDir, withIntermediateDirectories: true)
                 try FileManager.default.createDirectory(at: aerialThumbDir, withIntermediateDirectories: true)
                 
-                // Keep local video updated for LiveWallpaper.saver
-                if FileManager.default.fileExists(atPath: localVideo.path) {
-                    try? FileManager.default.removeItem(at: localVideo)
+                // Copy to localVideo1
+                if FileManager.default.fileExists(atPath: localVideo1.path) {
+                    try? FileManager.default.removeItem(at: localVideo1)
                 }
-                try? FileManager.default.copyItem(at: sourceURL, to: localVideo)
+                try? FileManager.default.copyItem(at: sourceURL, to: localVideo1)
                 
-                // Copy the new video to the native aerial screensaver slot
+                // Copy to localVideo2
+                if FileManager.default.fileExists(atPath: localVideo2.path) {
+                    try? FileManager.default.removeItem(at: localVideo2)
+                }
+                try? FileManager.default.copyItem(at: sourceURL, to: localVideo2)
+                
+                // Copy to native aerial screensaver slot
                 if FileManager.default.fileExists(atPath: targetMov.path) {
                     try? FileManager.default.removeItem(at: targetMov)
                 }
-                try FileManager.default.copyItem(at: sourceURL, to: targetMov)
+                try? FileManager.default.copyItem(at: sourceURL, to: targetMov)
                 
                 // Extract matching thumbnail
                 let gen = AVAssetImageGenerator(asset: asset)
@@ -140,17 +175,110 @@ public final class LockScreenPosterManager {
                     }
                 }
                 
-                await MainActor.run {
-                    self.ensureNativeAerialScreenSaverConfigured()
-                    NSLog("[LockScreenPosterManager] Synchronized new video to native macOS Screen Saver!")
+                // Configure Index.plist for Idle
+                Self.ensureNativeAerialScreenSaverConfigured()
+                
+                // Configure com.apple.screensaver defaults to LiveWallpaper.saver
+                let saverPath = "\(home.path)/Library/Screen Savers/LiveWallpaper.saver"
+                let dict: [String: Any] = [
+                    "moduleName": "LiveWallpaper",
+                    "path": saverPath,
+                    "type": 0
+                ]
+                UserDefaults(suiteName: "com.apple.screensaver")?.set(dict, forKey: "moduleDict")
+                
+                // Duplicate to VideoBackdrop.saver so whichever saver macOS loads, it works!
+                let legacySaver = "\(home.path)/Library/Screen Savers/VideoBackdrop.saver"
+                if FileManager.default.fileExists(atPath: saverPath) {
+                    try? FileManager.default.removeItem(atPath: legacySaver)
+                    try? FileManager.default.copyItem(atPath: saverPath, toPath: legacySaver)
                 }
+                
+                NSLog("[LockScreenPosterManager] Synchronized video to both native Aerials and LiveWallpaper.saver!")
             } catch {
                 NSLog("[LockScreenPosterManager] Warning syncing screensaver video: \(error.localizedDescription)")
             }
         }
     }
     
-    public func ensureNativeAerialScreenSaverConfigured() {
+    private nonisolated static func updateIndexPlistForDesktop(stableURL: URL) {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let indexURL = home.appendingPathComponent("Library/Application Support/com.apple.wallpaper/Store/Index.plist")
+        guard FileManager.default.fileExists(atPath: indexURL.path),
+              let data = try? Data(contentsOf: indexURL),
+              var plist = try? PropertyListSerialization.propertyList(from: data, options: .mutableContainersAndLeaves, format: nil) as? [String: Any] else {
+            return
+        }
+        
+        let configDict: [String: Any] = [
+            "type": "imageFile",
+            "url": ["relative": "file://\(stableURL.path)"]
+        ]
+        guard let configData = try? PropertyListSerialization.data(fromPropertyList: configDict, format: .binary, options: 0) else {
+            return
+        }
+        
+        let imageChoice: [String: Any] = [
+            "Configuration": configData,
+            "Files": [String](),
+            "Provider": "com.apple.wallpaper.choice.image"
+        ]
+        
+        let desktopDict: [String: Any] = [
+            "Content": [
+                "Choices": [imageChoice],
+                "EncodedOptionValues": "$null",
+                "Shuffle": "$null"
+            ],
+            "LastSet": Date(),
+            "LastUse": Date()
+        ]
+        
+        var modified = false
+        if var sysDefault = plist["SystemDefault"] as? [String: Any] {
+            sysDefault["Desktop"] = desktopDict
+            plist["SystemDefault"] = sysDefault
+            modified = true
+        }
+        if var allSpaces = plist["AllSpacesAndDisplays"] as? [String: Any] {
+            allSpaces["Desktop"] = desktopDict
+            plist["AllSpacesAndDisplays"] = allSpaces
+            modified = true
+        }
+        if var displays = plist["Displays"] as? [String: [String: Any]] {
+            for (k, var disp) in displays {
+                disp["Desktop"] = desktopDict
+                displays[k] = disp
+                modified = true
+            }
+            plist["Displays"] = displays
+        }
+        if var spaces = plist["Spaces"] as? [String: [String: Any]] {
+            for (k, var space) in spaces {
+                if var def = space["Default"] as? [String: Any] {
+                    def["Desktop"] = desktopDict
+                    space["Default"] = def
+                    spaces[k] = space
+                    modified = true
+                }
+            }
+            plist["Spaces"] = spaces
+        }
+        
+        if modified, let updatedData = try? PropertyListSerialization.data(fromPropertyList: plist, format: .binary, options: 0) {
+            try? updatedData.write(to: indexURL, options: .atomic)
+            
+            // Gently reload WallpaperAgent so macOS immediately reflects the new Lock Screen / Desktop picture
+            DispatchQueue.global(qos: .utility).async {
+                let task = Process()
+                task.executableURL = URL(fileURLWithPath: "/usr/bin/killall")
+                task.arguments = ["WallpaperAgent"]
+                try? task.run()
+            }
+        }
+    }
+    
+    public nonisolated static func ensureNativeAerialScreenSaverConfigured() {
         let home = FileManager.default.homeDirectoryForCurrentUser
         let indexURL = home.appendingPathComponent("Library/Application Support/com.apple.wallpaper/Store/Index.plist")
         guard FileManager.default.fileExists(atPath: indexURL.path),
@@ -225,6 +353,13 @@ public final class LockScreenPosterManager {
         
         if modified, let updatedData = try? PropertyListSerialization.data(fromPropertyList: plist, format: .binary, options: 0) {
             try? updatedData.write(to: indexURL, options: .atomic)
+            
+            DispatchQueue.global(qos: .utility).async {
+                let task = Process()
+                task.executableURL = URL(fileURLWithPath: "/usr/bin/killall")
+                task.arguments = ["WallpaperAgent"]
+                try? task.run()
+            }
         }
     }
     

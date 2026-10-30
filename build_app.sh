@@ -45,5 +45,9 @@ echo "==> Installing to /Applications/LiveWallpaper.app..."
 rm -rf /Applications/LiveWallpaper.app
 cp -R "$APP_DIR" /Applications/LiveWallpaper.app
 
+if [ -f "$PROJECT_DIR/build_screensaver.sh" ]; then
+    bash "$PROJECT_DIR/build_screensaver.sh"
+fi
+
 echo "==> Build successful! LiveWallpaper.app is ready in /Applications and at:"
 echo "    $APP_DIR"

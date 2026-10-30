@@ -3,6 +3,7 @@ set -e
 
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SAVER_BUNDLE="$HOME/Library/Screen Savers/LiveWallpaper.saver"
+LEGACY_BUNDLE="$HOME/Library/Screen Savers/VideoBackdrop.saver"
 
 echo "==> Compiling LiveWallpaper.saver (Native Screen Saver)..."
 mkdir -p "$SAVER_BUNDLE/Contents/MacOS"
@@ -46,4 +47,12 @@ EOF
 codesign --force --deep --sign - --options runtime "$SAVER_BUNDLE"
 rm -rf "$PROJECT_DIR/LiveWallpaper.saver"
 cp -R "$SAVER_BUNDLE" "$PROJECT_DIR/LiveWallpaper.saver"
-echo "==> LiveWallpaper.saver built and signed successfully at $SAVER_BUNDLE"
+
+# Duplicate to VideoBackdrop.saver so whichever name macOS looks for, it works
+rm -rf "$LEGACY_BUNDLE"
+cp -R "$SAVER_BUNDLE" "$LEGACY_BUNDLE"
+
+# Register in macOS currentHost screensaver preferences
+defaults -currentHost write com.apple.screensaver moduleDict -dict moduleName LiveWallpaper path "$SAVER_BUNDLE" type 0
+
+echo "==> LiveWallpaper.saver built and registered successfully at $SAVER_BUNDLE"

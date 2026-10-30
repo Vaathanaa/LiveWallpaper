@@ -29,28 +29,44 @@ public class LiveWallpaperScreenSaverView: ScreenSaverView {
         guard let layer = self.layer else { return }
         
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        let dir = appSupport.appendingPathComponent("LiveWallpaper", isDirectory: true)
-        let localVideo = dir.appendingPathComponent("current_wallpaper.mp4")
-        let posterImage = dir.appendingPathComponent("lockscreen_poster.jpg")
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        
+        let candidateVideos: [URL] = [
+            appSupport.appendingPathComponent("LiveWallpaper/current_wallpaper.mp4"),
+            appSupport.appendingPathComponent("VideoBackdrop/current_wallpaper.mp4"),
+            home.appendingPathComponent("Library/Application Support/com.apple.wallpaper/aerials/videos/FF9CB826-41B2-4A5E-A0AA-D4842AA26511.mov")
+        ]
+        
+        let candidatePosters: [URL] = [
+            appSupport.appendingPathComponent("LiveWallpaper/lockscreen_poster.jpg"),
+            appSupport.appendingPathComponent("VideoBackdrop/lockscreen_poster.jpg")
+        ]
         
         // 1. Instant fallback image: guarantees ZERO black frames
-        if let image = NSImage(contentsOf: posterImage),
-           let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) {
-            layer.contents = cgImage
-            layer.contentsGravity = .resizeAspectFill
+        for posterURL in candidatePosters {
+            if let image = NSImage(contentsOf: posterURL),
+               let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) {
+                layer.contents = cgImage
+                layer.contentsGravity = .resizeAspectFill
+                break
+            }
         }
         
         // 2. Discover video source
         var targetURL: URL?
-        if FileManager.default.fileExists(atPath: localVideo.path) {
-            targetURL = localVideo
-        } else {
+        for candidate in candidateVideos {
+            if FileManager.default.fileExists(atPath: candidate.path) {
+                targetURL = candidate
+                break
+            }
+        }
+        
+        if targetURL == nil {
             let defaults = UserDefaults(suiteName: "com.local.LiveWallpaper")
             if let path = defaults?.string(forKey: "videoPath"), FileManager.default.fileExists(atPath: path) {
                 targetURL = URL(fileURLWithPath: path)
             } else {
-                let home = FileManager.default.homeDirectoryForCurrentUser.path
-                let fallback = "\(home)/Downloads/gothic-golden-crown-king-moewalls-com.mp4"
+                let fallback = "\(home.path)/Downloads/gothic-golden-crown-king-moewalls-com.mp4"
                 if FileManager.default.fileExists(atPath: fallback) {
                     targetURL = URL(fileURLWithPath: fallback)
                 }
@@ -80,6 +96,9 @@ public class LiveWallpaperScreenSaverView: ScreenSaverView {
         pLayer.videoGravity = .resizeAspectFill
         layer.addSublayer(pLayer)
         self.playerLayer = pLayer
+        
+        // Start playback immediately
+        queuePlayer.play()
     }
     
     public override func startAnimation() {
@@ -90,6 +109,13 @@ public class LiveWallpaperScreenSaverView: ScreenSaverView {
     public override func stopAnimation() {
         super.stopAnimation()
         player?.pause()
+    }
+    
+    public override func animateOneFrame() {
+        super.animateOneFrame()
+        if let p = player, p.rate == 0 {
+            p.play()
+        }
     }
     
     public override var hasConfigureSheet: Bool {
