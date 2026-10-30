@@ -21,7 +21,7 @@ public final class MetalBackdropView: NSView {
     private var startTime: CFTimeInterval = CACurrentMediaTime()
     private var currentMousePos: CGPoint = .zero
     private var targetMousePos: CGPoint = .zero
-    private var isCurrentlyPaused: Bool = false
+    private var isCurrentlyPaused: Bool = true
     
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -58,7 +58,6 @@ public final class MetalBackdropView: NSView {
         }
         
         buildPipeline(device: device)
-        startRendering()
     }
     
     public override func layout() {

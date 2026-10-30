@@ -25,7 +25,7 @@ public final class ParticleOverlayView: NSView {
         emitterLayer.frame = bounds
         emitterLayer.autoresizingMask = [.layerWidthSizable, .layerHeightSizable]
         emitterLayer.renderMode = .additive
-        emitterLayer.masksToBounds = true
+        emitterLayer.masksToBounds = false
         layer?.addSublayer(emitterLayer)
     }
     

@@ -65,10 +65,13 @@ public final class VideoPlayerView: NSView {
     public override func makeBackingLayer() -> CALayer {
         let playerLayer = AVPlayerLayer()
         // Crucial for iPhone Mirroring & floating video overlays on Apple Silicon external displays:
-        // Setting isOpaque = false and opacity = 0.999 ensures WindowServer treats this layer as a
-        // GPU-composited surface rather than monopolizing the external monitor's single hardware
-        // video direct-scanout plane. This allows iPhone Mirroring to run seamlessly without tearing or glitches.
-        playerLayer.isOpaque = false
+        // Setting opacity = 0.999 ensures WindowServer treats this layer as a GPU-composited surface
+        // rather than monopolizing the external monitor's single hardware video direct-scanout plane
+        // (preventing iPhone Mirroring tearing/glitches).
+        // Setting isOpaque = true informs CoreAnimation that video pixel buffers have full alpha,
+        // which eliminates WindowServer cursor compositor alpha-blending bugs (preventing stray black pixels
+        // tracking custom-scaled accessibility mouse pointers).
+        playerLayer.isOpaque = true
         playerLayer.opacity = 0.999
         playerLayer.videoGravity = .resizeAspectFill
         playerLayer.autoresizingMask = [.layerWidthSizable, .layerHeightSizable]

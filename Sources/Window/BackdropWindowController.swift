@@ -17,7 +17,7 @@ public final class BackdropWindowController: NSWindowController {
     
     public let playerView: VideoPlayerView
     public private(set) var webView: WebBackdropView?
-    public let metalView: MetalBackdropView
+    public private(set) var metalView: MetalBackdropView?
     public let particleView: ParticleOverlayView
     
     // Per-monitor independent spring physics (zero multi-monitor coordinate jumping)
@@ -64,12 +64,8 @@ public final class BackdropWindowController: NSWindowController {
         // Web / Shader View is loaded lazily on-demand when .web is chosen to save 45MB RAM
         self.webView = nil
         
-        // Native Metal 4 Compute Shader View (Inside Background Plane)
-        let mView = MetalBackdropView(frame: screenBounds)
-        mView.autoresizingMask = [.width, .height]
-        mView.isHidden = true
-        self.metalView = mView
-        bgPlane.addSubview(mView)
+        // Native Metal 4 Compute Shader View is loaded lazily on-demand when .metal is chosen
+        self.metalView = nil
         
         // Foreground Depth Plane (Particles floating in front of screen)
         let fgPlane = NSView(frame: screenBounds)
@@ -123,8 +119,11 @@ public final class BackdropWindowController: NSWindowController {
                 web.removeFromSuperview()
                 self.webView = nil
             }
-            metalView.isHidden = true
-            metalView.pause()
+            if let metal = metalView {
+                metal.pause()
+                metal.removeFromSuperview()
+                self.metalView = nil
+            }
             updateParticleOverlay()
             
             if PlaybackCoordinator.shared.resourceMonitor.activePauseReasons.isEmpty {
@@ -139,16 +138,29 @@ public final class BackdropWindowController: NSWindowController {
                 web.removeFromSuperview()
                 self.webView = nil
             }
-            metalView.isHidden = false
-            metalView.resume()
+            let metal: MetalBackdropView
+            if let existing = self.metalView {
+                metal = existing
+            } else {
+                let newMetal = MetalBackdropView(frame: containerView.bounds)
+                newMetal.autoresizingMask = [.width, .height]
+                backgroundPlane.addSubview(newMetal)
+                self.metalView = newMetal
+                metal = newMetal
+            }
+            metal.isHidden = false
+            metal.resume()
             PlaybackCoordinator.shared.pause()
             updateParticleOverlay()
             
         case .web:
             backgroundPlane.layer?.backgroundColor = NSColor.clear.cgColor
             playerView.isHidden = true
-            metalView.isHidden = true
-            metalView.pause()
+            if let metal = metalView {
+                metal.pause()
+                metal.removeFromSuperview()
+                self.metalView = nil
+            }
             
             let web: WebBackdropView
             if let existing = self.webView {
@@ -180,8 +192,11 @@ public final class BackdropWindowController: NSWindowController {
                 web.removeFromSuperview()
                 self.webView = nil
             }
-            metalView.isHidden = true
-            metalView.pause()
+            if let metal = metalView {
+                metal.pause()
+                metal.removeFromSuperview()
+                self.metalView = nil
+            }
             PlaybackCoordinator.shared.pause()
             
             particleView.isHidden = false
@@ -388,8 +403,8 @@ public final class BackdropWindowController: NSWindowController {
         }
         
         // 4. Forward to Metal Compute Shader if active
-        if !metalView.isHidden {
-            metalView.updateMousePosition(normalized: CGPoint(x: normX * 0.5 + 0.5, y: normY * 0.5 + 0.5))
+        if let metal = metalView, !metal.isHidden {
+            metal.updateMousePosition(normalized: CGPoint(x: normX * 0.5 + 0.5, y: normY * 0.5 + 0.5))
         }
         
         CATransaction.commit()
@@ -436,7 +451,7 @@ public final class BackdropWindowController: NSWindowController {
         
         playerView.frame = newBounds
         webView?.frame = newBounds
-        metalView.frame = newBounds
+        metalView?.frame = newBounds
         particleView.frame = newBounds
         
         resetTransforms()
@@ -477,32 +492,32 @@ public final class BackdropWindowController: NSWindowController {
         if visible {
             window.orderFrontRegardless()
             if let web = webView, !web.isHidden { web.resume() }
-            if !metalView.isHidden { metalView.resume() }
+            if let metal = metalView, !metal.isHidden { metal.resume() }
             if !particleView.isHidden { particleView.resume() }
         } else {
             window.orderOut(nil)
             if let web = webView, !web.isHidden { web.pause() }
-            if !metalView.isHidden { metalView.pause() }
+            if let metal = metalView, !metal.isHidden { metal.pause() }
             if !particleView.isHidden { particleView.pause() }
         }
     }
     
     public func pauseInteractiveLayers() {
         webView?.pause()
-        metalView.pause()
+        metalView?.pause()
         particleView.pause()
     }
     
     public func resumeInteractiveLayers() {
         if let web = webView, !web.isHidden { web.resume() }
-        if !metalView.isHidden { metalView.resume() }
+        if let metal = metalView, !metal.isHidden { metal.resume() }
         if !particleView.isHidden { particleView.resume() }
     }
     
     public func tearDown() {
         detachPlayer()
         webView?.pause()
-        metalView.pause()
+        metalView?.pause()
         particleView.pause()
         window?.orderOut(nil)
         window?.close()
