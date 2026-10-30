@@ -16,6 +16,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, StatusMenuContr
     public func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
         
+        // Save original system desktop wallpapers
+        LockScreenPosterManager.shared.saveOriginalWallpapers()
+        
         menuController = StatusMenuController()
         menuController.delegate = self
         
@@ -138,9 +141,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, StatusMenuContr
     }
     
     public func applicationWillTerminate(_ notification: Notification) {
-        NSLog("[LiveWallpaper] Terminating.")
+        NSLog("[LiveWallpaper] Terminating: restoring static desktop wallpaper.")
         PlaybackCoordinator.shared.tearDown()
         WindowManager.shared.tearDown()
+        
+        // Restore original system wallpaper
+        LockScreenPosterManager.shared.restoreOriginalWallpapers()
     }
     
     public func statusMenuDidRequestSettings() {

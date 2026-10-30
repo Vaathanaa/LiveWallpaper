@@ -235,6 +235,40 @@ public struct SettingsView: View {
                     Text("Stretch to Fill").tag(AVLayerVideoGravity.resize)
                 }
             }
+            
+            Section(header: Text("Lock Screen & Screen Saver Synchronization")) {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Label("Lock Screen Matching Poster", systemImage: "lock.desktopcomputer")
+                        Spacer()
+                        Button("Sync Lock Screen Now") {
+                            if let asset = PlaybackCoordinator.shared.primaryEngine.currentAsset {
+                                LockScreenPosterManager.shared.updateLockScreenPoster(
+                                    for: asset,
+                                    at: PlaybackCoordinator.shared.primaryEngine.currentTime
+                                )
+                            }
+                        }
+                        .controlSize(.small)
+                    }
+                    
+                    HStack {
+                        Label("macOS Native 120Hz Screen Saver", systemImage: "sparkles.tv")
+                        Spacer()
+                        Button("Sync Screen Saver Now") {
+                            if let p = settings.videoPath,
+                               let asset = PlaybackCoordinator.shared.primaryEngine.currentAsset {
+                                LockScreenPosterManager.shared.syncScreenSaverVideo(from: URL(fileURLWithPath: p), asset: asset)
+                            }
+                        }
+                        .controlSize(.small)
+                    }
+                    
+                    Text("Automatically updates macOS Lock Screen posters and native 120Hz Aerial Screen Savers whenever a live wallpaper is set or paused.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
         }
         .formStyle(.grouped)
     }

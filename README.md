@@ -41,6 +41,9 @@
 - 🖱️ **3D Mouse Parallax & Dynamic Depth**:
   - Velvety spring-mass-damper physics with menu-bar and hot-corner safety cushions.
   - Automatically sleeps CADisplayLink when the cursor is idle (0.0% idle CPU).
+- 🔒 **Lock Screen & Screen Saver Synchronization**:
+  - Automatically extracts 4K wallpaper posters for the macOS Lock Screen whenever a wallpaper is applied or paused.
+  - Synchronizes active video wallpaper loops directly to macOS's native 120Hz Aerial Screen Saver engine.
 
 ---
 
@@ -93,7 +96,7 @@ open /Applications/LiveWallpaper.app
 LiveWallpaper lives unobtrusively in your macOS menu bar (`play.desktopcomputer`):
 
 - **Live Mini-Player Card**: Real-time thumbnail preview, timeline scrubber, and status badges.
-- **Displays & Media Tab**: Video backdrop picker, live timeline playhead scrubber, multi-monitor configuration.
+- **Displays & Media Tab**: Video backdrop picker, live timeline playhead scrubber, multi-monitor configuration, Lock Screen & Screen Saver sync.
 - **Studio & Loop Tab**: Video trimmer, playhead scrubber, crossfade looper, ping-pong reversal, speed, audio mute.
 - **Atmosphere Tab**: Exposure, contrast, saturation, vignette, frost blur, widget readability cushion, dynamic color harmony.
 - **Interactive & Shaders**: Native Metal 4 compute shaders, 3D mouse parallax, weather particle overlays.

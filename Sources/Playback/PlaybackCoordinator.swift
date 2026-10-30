@@ -221,7 +221,7 @@ public final class PlaybackCoordinator: NSObject, ResourceMonitorDelegate, Video
         }
     }
     
-    public func loadVideo(url: URL) {
+    public func loadVideo(url: URL, syncScreenSaver: Bool = true) {
         let settings = AppSettings.shared
         
         if let bookmark = SecurityBookmarkManager.shared.createBookmark(for: url) {
@@ -236,6 +236,12 @@ public final class PlaybackCoordinator: NSObject, ResourceMonitorDelegate, Video
                 isMuted: settings.isMuted,
                 playbackSpeed: settings.playbackSpeed
             )
+            
+            // Sync lock screen poster frame AND native 120Hz aerial screen saver
+            if syncScreenSaver, let asset = primaryEngine.currentAsset {
+                LockScreenPosterManager.shared.updateLockScreenPoster(for: asset, at: .zero)
+                LockScreenPosterManager.shared.syncScreenSaverVideo(from: url, asset: asset)
+            }
             
             // Rebuild/update secondary engines so all monitors receive a dedicated hardware stream
             await updateSecondaryEngines(url: url)
@@ -558,7 +564,12 @@ public final class PlaybackCoordinator: NSObject, ResourceMonitorDelegate, Video
                 WindowManager.shared.setWindowsVisible(false)
             }
             
-
+            // If paused specifically due to lock screen, update lock screen wallpaper with current paused frame
+            if activeReasons.contains(.screenLocked) {
+                if let asset = primaryEngine.currentAsset {
+                    LockScreenPosterManager.shared.updateLockScreenPoster(for: asset, at: primaryEngine.currentTime)
+                }
+            }
         }
     }
     
