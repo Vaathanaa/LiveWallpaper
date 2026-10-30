@@ -23,8 +23,9 @@ public final class OcclusionDetector {
         stop()
         // Slow periodic check (every 3 seconds)
         checkTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self] _ in
+            guard let self = self else { return }
             Task { @MainActor in
-                self?.evaluateOcclusion()
+                self.evaluateOcclusion()
             }
         }
         scheduleEvaluation(delay: 0.5)
@@ -56,8 +57,9 @@ public final class OcclusionDetector {
             object: nil,
             queue: .main
         ) { [weak self] _ in
+            guard let self = self else { return }
             Task { @MainActor in
-                self?.scheduleEvaluation(delay: 0.9)
+                self.scheduleEvaluation(delay: 0.9)
             }
         }
         
@@ -66,8 +68,9 @@ public final class OcclusionDetector {
             object: nil,
             queue: .main
         ) { [weak self] _ in
+            guard let self = self else { return }
             Task { @MainActor in
-                self?.scheduleEvaluation(delay: 0.9)
+                self.scheduleEvaluation(delay: 0.9)
             }
         }
     }
@@ -75,8 +78,9 @@ public final class OcclusionDetector {
     private func scheduleEvaluation(delay: TimeInterval) {
         debounceTimer?.invalidate()
         debounceTimer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
+            guard let self = self else { return }
             Task { @MainActor in
-                self?.evaluateOcclusion()
+                self.evaluateOcclusion()
             }
         }
     }

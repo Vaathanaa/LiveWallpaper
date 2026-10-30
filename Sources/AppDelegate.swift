@@ -149,8 +149,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, StatusMenuContr
             object: nil,
             queue: .main
         ) { [weak self] _ in
+            guard let self = self else { return }
             Task { @MainActor in
-                self?.openSettingsWindow()
+                self.openSettingsWindow()
             }
         }
     }

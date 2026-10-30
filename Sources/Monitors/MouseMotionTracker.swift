@@ -101,8 +101,9 @@ public final class MouseMotionTracker: NSObject, ObservableObject {
         } else {
             // High-precision fallback timer
             fallbackTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 120.0, repeats: true) { [weak self] _ in
+                guard let self = self else { return }
                 Task { @MainActor in
-                    self?.tickDisplayLink(dt: 1.0 / 120.0)
+                    self.tickDisplayLink(dt: 1.0 / 120.0)
                 }
             }
         }
