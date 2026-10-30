@@ -158,8 +158,14 @@ public final class LockScreenPosterManager {
         let aerialVideosDir = home.appendingPathComponent("Library/Application Support/com.apple.wallpaper/aerials/videos", isDirectory: true)
         let aerialThumbDir = home.appendingPathComponent("Library/Application Support/com.apple.wallpaper/aerials/thumbnails", isDirectory: true)
         
-        let targetMov = aerialVideosDir.appendingPathComponent("FF9CB826-41B2-4A5E-A0AA-D4842AA26511.mov")
-        let targetThumb = aerialThumbDir.appendingPathComponent("FF9CB826-41B2-4A5E-A0AA-D4842AA26511.png")
+        // Native macOS Sequoia aerial video targets that WallpaperAgent plays
+        let officialAerialIDs = [
+            "C6AECFD2-A365-4504-9E2C-F86343F9421F", // macOS Sequoia / Sonoma Dark
+            "4DFE24ED-71CC-42D4-9FE8-3B8959B6CC19", // macOS Sequoia / Sonoma Light
+            "11AB4259-C435-4F92-A108-D6B9CC6D2295", // macOS Sequoia / Sonoma Light Portrait
+            "731140AB-82EF-47B5-B62C-285BA7E112FD", // macOS Sequoia / Sonoma Dark Portrait
+            "FF9CB826-41B2-4A5E-A0AA-D4842AA26511"  // Custom fallback
+        ]
         
         Task.detached(priority: .background) {
             do {
@@ -171,7 +177,13 @@ public final class LockScreenPosterManager {
                 try FileManager.default.createDirectory(at: aerialThumbDir, withIntermediateDirectories: true)
                 
                 // Helper to avoid redundant multi-megabyte writes on startup
-                func syncFileIfNeeded(from src: URL, to dst: URL) {
+                func syncFileIfNeeded(from src: URL, to dst: URL, backupOriginal: Bool = false) {
+                    if backupOriginal && FileManager.default.fileExists(atPath: dst.path) {
+                        let backupURL = dst.appendingPathExtension("original")
+                        if !FileManager.default.fileExists(atPath: backupURL.path) {
+                            try? FileManager.default.copyItem(at: dst, to: backupURL)
+                        }
+                    }
                     if FileManager.default.fileExists(atPath: dst.path) {
                         if let srcAttrs = try? FileManager.default.attributesOfItem(atPath: src.path),
                            let dstAttrs = try? FileManager.default.attributesOfItem(atPath: dst.path),
@@ -189,20 +201,28 @@ public final class LockScreenPosterManager {
                 syncFileIfNeeded(from: sourceURL, to: localVideo2)
                 syncFileIfNeeded(from: sourceURL, to: moviesVideo)
                 syncFileIfNeeded(from: sourceURL, to: containerVideo)
-                syncFileIfNeeded(from: sourceURL, to: targetMov)
+                
+                // Sync all native macOS aerial slots so WallpaperAgent ALWAYS plays the live video
+                for aerialID in officialAerialIDs {
+                    let aerialTarget = aerialVideosDir.appendingPathComponent("\(aerialID).mov")
+                    syncFileIfNeeded(from: sourceURL, to: aerialTarget, backupOriginal: true)
+                }
                 
                 // Extract matching thumbnail for macOS native aerials
-                if !FileManager.default.fileExists(atPath: targetThumb.path) {
-                    let gen = AVAssetImageGenerator(asset: asset)
-                    gen.appliesPreferredTrackTransform = true
-                    var targetTime = CMTime(seconds: 1.0, preferredTimescale: 600)
-                    if let duration = try? await asset.load(.duration), CMTimeGetSeconds(duration) <= 1.0 {
-                        targetTime = .zero
-                    }
-                    if let (cgImage, _) = try? await gen.image(at: targetTime) {
-                        let rep = NSBitmapImageRep(cgImage: cgImage)
-                        if let pngData = rep.representation(using: .png, properties: [:]) {
-                            try? pngData.write(to: targetThumb, options: .atomic)
+                let gen = AVAssetImageGenerator(asset: asset)
+                gen.appliesPreferredTrackTransform = true
+                var targetTime = CMTime(seconds: 1.0, preferredTimescale: 600)
+                if let duration = try? await asset.load(.duration), CMTimeGetSeconds(duration) <= 1.0 {
+                    targetTime = .zero
+                }
+                if let (cgImage, _) = try? await gen.image(at: targetTime) {
+                    let rep = NSBitmapImageRep(cgImage: cgImage)
+                    if let pngData = rep.representation(using: .png, properties: [:]) {
+                        for aerialID in officialAerialIDs {
+                            let thumbURL = aerialThumbDir.appendingPathComponent("\(aerialID).png")
+                            if !FileManager.default.fileExists(atPath: thumbURL.path) {
+                                try? pngData.write(to: thumbURL, options: .atomic)
+                            }
                         }
                     }
                 }
@@ -322,7 +342,9 @@ public final class LockScreenPosterManager {
             return
         }
         
-        let configDict: [String: Any] = ["assetID": "FF9CB826-41B2-4A5E-A0AA-D4842AA26511"]
+        let isDark = ResourceMonitor.isDarkMode()
+        let activeAssetID = isDark ? "C6AECFD2-A365-4504-9E2C-F86343F9421F" : "4DFE24ED-71CC-42D4-9FE8-3B8959B6CC19"
+        let configDict: [String: Any] = ["assetID": activeAssetID]
         guard let configData = try? PropertyListSerialization.data(fromPropertyList: configDict, format: .binary, options: 0) else {
             return
         }
@@ -399,6 +421,7 @@ public final class LockScreenPosterManager {
     public func restoreOriginalWallpapers() {
         NSLog("[LockScreenPosterManager] Restoring macOS default wallpaper and lock screen...")
         let defaultWallpaperURL = URL(fileURLWithPath: "/System/Library/CoreServices/DefaultDesktop.heic")
+        let home = FileManager.default.homeDirectoryForCurrentUser
         
         // 1. Reset each screen to original wallpaper or macOS DefaultDesktop.heic
         for screen in NSScreen.screens {
@@ -437,8 +460,25 @@ public final class LockScreenPosterManager {
             }
         }
         
-        // 3. Restore Index.plist from backup or point to DefaultDesktop.heic
-        let home = FileManager.default.homeDirectoryForCurrentUser
+        // 3. Restore original aerial videos if modified
+        let aerialVideosDir = home.appendingPathComponent("Library/Application Support/com.apple.wallpaper/aerials/videos", isDirectory: true)
+        let officialAerialIDs = [
+            "C6AECFD2-A365-4504-9E2C-F86343F9421F",
+            "4DFE24ED-71CC-42D4-9FE8-3B8959B6CC19",
+            "11AB4259-C435-4F92-A108-D6B9CC6D2295",
+            "731140AB-82EF-47B5-B62C-285BA7E112FD"
+        ]
+        for aid in officialAerialIDs {
+            let backupMov = aerialVideosDir.appendingPathComponent("\(aid).mov.original")
+            let targetMov = aerialVideosDir.appendingPathComponent("\(aid).mov")
+            if FileManager.default.fileExists(atPath: backupMov.path) {
+                try? FileManager.default.removeItem(at: targetMov)
+                try? FileManager.default.copyItem(at: backupMov, to: targetMov)
+                try? FileManager.default.removeItem(at: backupMov)
+            }
+        }
+        
+        // 4. Restore Index.plist from backup or point to DefaultDesktop.heic
         let storeDir = home.appendingPathComponent("Library/Application Support/com.apple.wallpaper/Store", isDirectory: true)
         let indexURL = storeDir.appendingPathComponent("Index.plist")
         let backupURL = storeDir.appendingPathComponent("Index.plist.backup")

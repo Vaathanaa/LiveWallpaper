@@ -68,6 +68,8 @@ public class LiveWallpaperScreenSaverView: ScreenSaverView {
             home.appendingPathComponent("Library/Containers/com.apple.ScreenSaver.Engine.legacyScreenSaver/Data/Library/Application Support/LiveWallpaper/current_wallpaper.mp4"),
             appSupport.appendingPathComponent("LiveWallpaper/current_wallpaper.mp4"),
             appSupport.appendingPathComponent("VideoBackdrop/current_wallpaper.mp4"),
+            home.appendingPathComponent("Library/Application Support/com.apple.wallpaper/aerials/videos/C6AECFD2-A365-4504-9E2C-F86343F9421F.mov"),
+            home.appendingPathComponent("Library/Application Support/com.apple.wallpaper/aerials/videos/4DFE24ED-71CC-42D4-9FE8-3B8959B6CC19.mov"),
             home.appendingPathComponent("Library/Application Support/com.apple.wallpaper/aerials/videos/FF9CB826-41B2-4A5E-A0AA-D4842AA26511.mov")
         ].compactMap { $0 }
         

@@ -254,11 +254,11 @@ public final class ResourceMonitor: NSObject, OcclusionDetectorDelegate {
         evaluateAllConditions()
     }
     
-    public static func isDarkMode() -> Bool {
+    public nonisolated static func isDarkMode() -> Bool {
         if let mode = UserDefaults.standard.string(forKey: "AppleInterfaceStyle"), mode.caseInsensitiveCompare("Dark") == .orderedSame {
             return true
         }
-        return NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        return false
     }
     
     private func stopTimersForSleep() {
