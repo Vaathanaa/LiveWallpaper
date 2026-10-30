@@ -33,8 +33,9 @@ public final class SystemDiagnostics: ObservableObject {
     public func startMonitoring() {
         stopMonitoring()
         updateTimer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: true) { [weak self] _ in
+            guard let self = self else { return }
             Task { @MainActor in
-                self?.refresh()
+                self.refresh()
             }
         }
         refresh()

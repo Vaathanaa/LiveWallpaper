@@ -268,8 +268,9 @@ public final class PlaybackCoordinator: NSObject, ResourceMonitorDelegate, Video
         dayNightCheckTimer?.invalidate()
         // Check time-of-day changes every 30 seconds
         dayNightCheckTimer = Timer.scheduledTimer(withTimeInterval: 30.0, repeats: true) { [weak self] _ in
+            guard let self = self else { return }
             Task { @MainActor in
-                self?.evaluateDayNightMode()
+                self.evaluateDayNightMode()
             }
         }
     }
@@ -318,8 +319,9 @@ public final class PlaybackCoordinator: NSObject, ResourceMonitorDelegate, Video
         let interval = Double(max(1, settings.playlistIntervalMinutes) * 60)
         if settings.playlistTrigger == .interval || settings.playlistTrigger == .both {
             playlistTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
+                guard let self = self else { return }
                 Task { @MainActor in
-                    self?.advancePlaylist(direction: .next)
+                    self.advancePlaylist(direction: .next)
                 }
             }
         }

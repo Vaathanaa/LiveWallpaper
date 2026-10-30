@@ -151,9 +151,10 @@ public final class ResourceMonitor: NSObject, OcclusionDetectorDelegate {
     
     private func startPowerPolling() {
         powerPollingTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
+            guard let self = self else { return }
             Task { @MainActor in
-                self?.evaluateAllConditions()
-                self?.delegate?.resourceMonitorDidUpdatePowerProfile()
+                self.evaluateAllConditions()
+                self.delegate?.resourceMonitorDidUpdatePowerProfile()
             }
         }
     }
@@ -451,8 +452,9 @@ public final class ResourceMonitor: NSObject, OcclusionDetectorDelegate {
             if idleBufferReleaseTimer == nil {
                 let delay = AppSettings.shared.idleBufferReleaseSeconds
                 idleBufferReleaseTimer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
+                    guard let self = self else { return }
                     Task { @MainActor in
-                        self?.delegate?.resourceMonitorDidTriggerIdleBufferRelease()
+                        self.delegate?.resourceMonitorDidTriggerIdleBufferRelease()
                     }
                 }
             }

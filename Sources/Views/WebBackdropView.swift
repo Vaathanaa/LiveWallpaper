@@ -59,12 +59,13 @@ public final class WebBackdropView: NSView, WKNavigationDelegate, WKUIDelegate {
     
     // MARK: - Navigation Security
     
-    public func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
-        // Only allow local file HTML, data URIs, or initial request to prevent arbitrary external redirect exploits
-        if navigationAction.navigationType == .other || navigationAction.targetFrame?.isMainFrame == true {
-            decisionHandler(.allow)
-        } else {
-            decisionHandler(.cancel)
+    nonisolated public func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+        Task { @MainActor in
+            if navigationAction.navigationType == .other || navigationAction.targetFrame?.isMainFrame == true {
+                decisionHandler(.allow)
+            } else {
+                decisionHandler(.cancel)
+            }
         }
     }
     

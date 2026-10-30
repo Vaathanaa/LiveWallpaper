@@ -253,8 +253,9 @@ public final class MetalBackdropView: NSView {
         // 60Hz - 120Hz smooth render loop with zero WebKit overhead
         let targetInterval: TimeInterval = 1.0 / 60.0
         renderTimer = Timer.scheduledTimer(withTimeInterval: targetInterval, repeats: true) { [weak self] _ in
+            guard let self = self else { return }
             Task { @MainActor in
-                self?.renderFrame()
+                self.renderFrame()
             }
         }
     }
