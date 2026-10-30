@@ -286,6 +286,12 @@ public final class WindowManager: NSObject, MouseMotionTrackerDelegate {
         }
     }
     
+    public func applyWakeCrossfade() {
+        for controller in windowControllers.values {
+            controller.applyWakeCrossfade()
+        }
+    }
+    
     public func tearDown() {
         MouseMotionTracker.shared.stop()
         for controller in windowControllers.values {

@@ -25,6 +25,17 @@ public final class VideoPlayerView: NSView {
         wantsLayer = true
         layerContentsRedrawPolicy = .never
         
+        // Instant Startup Frame: Load cached lockscreen_poster.jpg so the very first millisecond
+        // the backdrop window opens, it displays the crisp wallpaper frame with ZERO black gap!
+        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let posterURL = appSupport.appendingPathComponent("LiveWallpaper/lockscreen_poster.jpg")
+        if FileManager.default.fileExists(atPath: posterURL.path),
+           let image = NSImage(contentsOf: posterURL),
+           let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) {
+            layer?.contents = cgImage
+            layer?.contentsGravity = .resizeAspectFill
+        }
+        
         dimmingOverlayLayer.backgroundColor = NSColor.black.cgColor
         dimmingOverlayLayer.opacity = 0.0
         dimmingOverlayLayer.isHidden = true
@@ -96,7 +107,9 @@ public final class VideoPlayerView: NSView {
             playerLayer.add(transition, forKey: "playerCrossfade")
             playerLayer.player = player
         }
-        unfreezeCurrentFrame()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+            self?.unfreezeCurrentFrame()
+        }
     }
     
     public func detachPlayer(preserveFrame: Bool = true) {

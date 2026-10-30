@@ -484,6 +484,14 @@ public final class BackdropWindowController: NSWindowController {
         playerView.unfreezeCurrentFrame()
     }
     
+    public func applyWakeCrossfade() {
+        let transition = CATransition()
+        transition.type = .fade
+        transition.duration = 0.35
+        transition.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        playerView.playerLayer.add(transition, forKey: "wakeCrossfade")
+    }
+    
     public func updateFramerateMode(_ fps: TargetFPS) {}
     public func setDisplayLinkActive(_ active: Bool) {}
     

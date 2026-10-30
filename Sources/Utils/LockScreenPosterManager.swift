@@ -216,6 +216,14 @@ public final class LockScreenPosterManager {
                     syncFileIfNeeded(from: sourceURL, to: aerialTarget, backupOriginal: true)
                 }
                 
+                // ALSO sync any existing downloaded aerial videos in this directory so whatever macOS chooses, it plays the live video!
+                if let existingAerials = try? FileManager.default.contentsOfDirectory(atPath: aerialVideosDir.path) {
+                    for item in existingAerials where item.hasSuffix(".mov") && !item.hasSuffix(".original") {
+                        let target = aerialVideosDir.appendingPathComponent(item)
+                        syncFileIfNeeded(from: sourceURL, to: target, backupOriginal: true)
+                    }
+                }
+                
                 // Extract matching thumbnail for macOS native aerials
                 let gen = AVAssetImageGenerator(asset: asset)
                 gen.appliesPreferredTrackTransform = true
@@ -361,8 +369,22 @@ public final class LockScreenPosterManager {
             return
         }
         
-        let isDark = ResourceMonitor.isDarkMode()
-        let activeAssetID = isDark ? "C6AECFD2-A365-4504-9E2C-F86343F9421F" : "4DFE24ED-71CC-42D4-9FE8-3B8959B6CC19"
+        // Preserve current active aerial assetID from Index.plist if present, or fallback to standard Sequoia/Sonoma aerials
+        var activeAssetID = "FF9CB826-41B2-4A5E-A0AA-D4842AA26511"
+        if let allSpaces = plist["AllSpacesAndDisplays"] as? [String: Any],
+           let idle = allSpaces["Idle"] as? [String: Any],
+           let content = idle["Content"] as? [String: Any],
+           let choices = content["Choices"] as? [[String: Any]],
+           let first = choices.first,
+           let cfgData = first["Configuration"] as? Data,
+           let cfg = (try? PropertyListSerialization.propertyList(from: cfgData, options: [], format: nil)) as? [String: Any],
+           let existingID = cfg["assetID"] as? String {
+            activeAssetID = existingID
+        } else {
+            let isDark = ResourceMonitor.isDarkMode()
+            activeAssetID = isDark ? "C6AECFD2-A365-4504-9E2C-F86343F9421F" : "4DFE24ED-71CC-42D4-9FE8-3B8959B6CC19"
+        }
+        
         let configDict: [String: Any] = ["assetID": activeAssetID]
         guard let configData = try? PropertyListSerialization.data(fromPropertyList: configDict, format: .binary, options: 0) else {
             return
@@ -479,38 +501,24 @@ public final class LockScreenPosterManager {
             }
         }
         
-        // 3. Restore original aerial videos if modified
+        // 3. Restore all original aerial videos from backups
         let aerialVideosDir = home.appendingPathComponent("Library/Application Support/com.apple.wallpaper/aerials/videos", isDirectory: true)
-        let officialAerialIDs = [
-            "C6AECFD2-A365-4504-9E2C-F86343F9421F",
-            "4DFE24ED-71CC-42D4-9FE8-3B8959B6CC19",
-            "11AB4259-C435-4F92-A108-D6B9CC6D2295",
-            "731140AB-82EF-47B5-B62C-285BA7E112FD"
-        ]
-        for aid in officialAerialIDs {
-            let backupMov = aerialVideosDir.appendingPathComponent("\(aid).mov.original")
-            let targetMov = aerialVideosDir.appendingPathComponent("\(aid).mov")
-            if FileManager.default.fileExists(atPath: backupMov.path) {
+        if let items = try? FileManager.default.contentsOfDirectory(atPath: aerialVideosDir.path) {
+            for item in items where item.hasSuffix(".mov.original") {
+                let backupMov = aerialVideosDir.appendingPathComponent(item)
+                let originalName = String(item.dropLast(".original".count))
+                let targetMov = aerialVideosDir.appendingPathComponent(originalName)
                 try? FileManager.default.removeItem(at: targetMov)
                 try? FileManager.default.copyItem(at: backupMov, to: targetMov)
                 try? FileManager.default.removeItem(at: backupMov)
             }
         }
         
-        // 4. Restore Index.plist from backup or point to DefaultDesktop.heic
-        let storeDir = home.appendingPathComponent("Library/Application Support/com.apple.wallpaper/Store", isDirectory: true)
-        let indexURL = storeDir.appendingPathComponent("Index.plist")
-        let backupURL = storeDir.appendingPathComponent("Index.plist.backup")
+        // 4. Restore Index.plist Desktop and Idle to macOS Default
+        Self.updateIndexPlistForDesktop(stableURL: defaultWallpaperURL)
+        Self.restoreIndexPlistIdleToDefault()
         
-        if FileManager.default.fileExists(atPath: backupURL.path) {
-            try? FileManager.default.removeItem(at: indexURL)
-            try? FileManager.default.copyItem(at: backupURL, to: indexURL)
-            NSLog("[LockScreenPosterManager] Restored Index.plist from Index.plist.backup")
-        } else {
-            Self.updateIndexPlistForDesktop(stableURL: defaultWallpaperURL)
-        }
-        
-        // 4. Update System Events via AppleScript
+        // 5. Update System Events via AppleScript
         let defPathString = defaultWallpaperURL.path.replacingOccurrences(of: "\"", with: "\\\"")
         let script = """
         tell application "System Events"
@@ -525,10 +533,67 @@ public final class LockScreenPosterManager {
             appleScript.executeAndReturnError(&err)
         }
         
-        // 5. Gently signal WallpaperAgent to immediately apply the default wallpaper
+        // 6. Reset com.apple.screensaver defaults so legacy screensaver is deactivated
+        let resetTask = Process()
+        resetTask.executableURL = URL(fileURLWithPath: "/usr/bin/defaults")
+        resetTask.arguments = ["-currentHost", "delete", "com.apple.screensaver", "moduleDict"]
+        try? resetTask.run()
+        resetTask.waitUntilExit()
+        
+        // 7. Signal WallpaperAgent to immediately apply the default wallpaper and wait synchronously
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/usr/bin/killall")
         task.arguments = ["WallpaperAgent"]
         try? task.run()
+        task.waitUntilExit()
+        NSLog("[LockScreenPosterManager] macOS Default wallpaper successfully restored!")
+    }
+    
+    public nonisolated static func restoreIndexPlistIdleToDefault() {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let indexURL = home.appendingPathComponent("Library/Application Support/com.apple.wallpaper/Store/Index.plist")
+        guard FileManager.default.fileExists(atPath: indexURL.path),
+              let data = try? Data(contentsOf: indexURL),
+              var plist = try? PropertyListSerialization.propertyList(from: data, options: .mutableContainersAndLeaves, format: nil) as? [String: Any] else {
+            return
+        }
+        
+        // Reset Idle to null so macOS reverts to default aerial/screen saver
+        if var allSpaces = plist["AllSpacesAndDisplays"] as? [String: Any] {
+            allSpaces["Idle"] = "$null"
+            plist["AllSpacesAndDisplays"] = allSpaces
+        }
+        if var sysDefault = plist["SystemDefault"] as? [String: Any] {
+            sysDefault["Idle"] = "$null"
+            plist["SystemDefault"] = sysDefault
+        }
+        if var displays = plist["Displays"] as? [String: [String: Any]] {
+            for (k, var disp) in displays {
+                disp["Idle"] = "$null"
+                displays[k] = disp
+            }
+            plist["Displays"] = displays
+        }
+        if var spaces = plist["Spaces"] as? [String: [String: Any]] {
+            for (k, var space) in spaces {
+                if var def = space["Default"] as? [String: Any] {
+                    def["Idle"] = "$null"
+                    space["Default"] = def
+                }
+                if var dispMap = space["Displays"] as? [String: [String: Any]] {
+                    for (dispKey, var disp) in dispMap {
+                        disp["Idle"] = "$null"
+                        dispMap[dispKey] = disp
+                    }
+                    space["Displays"] = dispMap
+                }
+                spaces[k] = space
+            }
+            plist["Spaces"] = spaces
+        }
+        
+        if let updatedData = try? PropertyListSerialization.data(fromPropertyList: plist, format: .binary, options: 0) {
+            try? updatedData.write(to: indexURL, options: .atomic)
+        }
     }
 }

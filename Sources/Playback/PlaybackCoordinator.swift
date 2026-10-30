@@ -606,6 +606,7 @@ public final class PlaybackCoordinator: NSObject, ResourceMonitorDelegate, Video
         if settings.isPlaylistEnabled && (settings.playlistTrigger == .onWakeUnlock || settings.playlistTrigger == .both) {
             advancePlaylist(direction: .next)
         }
+        WindowManager.shared.applyWakeCrossfade()
     }
     
     public func resourceMonitorDidUpdatePowerProfile() {

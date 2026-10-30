@@ -9,6 +9,7 @@ public class LiveWallpaperScreenSaverView: ScreenSaverView {
     private var playerLooper: AVPlayerLooper?
     private var playerLayer: AVPlayerLayer?
     private var fallbackImage: NSImage?
+    private var isConfigured: Bool = false
     
     public override init?(frame: NSRect, isPreview: Bool) {
         super.init(frame: frame, isPreview: isPreview)
@@ -26,8 +27,22 @@ public class LiveWallpaperScreenSaverView: ScreenSaverView {
         return true
     }
     
+    public override func resize(withOldSuperviewSize oldSize: NSSize) {
+        super.resize(withOldSuperviewSize: oldSize)
+        updateLayerFrames()
+    }
+    
+    public override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        updateLayerFrames()
+    }
+    
     public override func layout() {
         super.layout()
+        updateLayerFrames()
+    }
+    
+    private func updateLayerFrames() {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         playerLayer?.frame = bounds
@@ -35,8 +50,11 @@ public class LiveWallpaperScreenSaverView: ScreenSaverView {
     }
     
     private func setupPlayer() {
+        guard !isConfigured else { return }
         self.wantsLayer = true
+        self.layerContentsRedrawPolicy = .never
         guard let layer = self.layer else { return }
+        layer.backgroundColor = NSColor.black.cgColor
         
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         let home = FileManager.default.homeDirectoryForCurrentUser
@@ -85,11 +103,6 @@ public class LiveWallpaperScreenSaverView: ScreenSaverView {
             let defaults = UserDefaults(suiteName: "com.local.LiveWallpaper")
             if let path = defaults?.string(forKey: "videoPath"), FileManager.default.fileExists(atPath: path) {
                 targetURL = URL(fileURLWithPath: path)
-            } else {
-                let fallback = "\(home.path)/Downloads/gothic-golden-crown-king-moewalls-com.mp4"
-                if FileManager.default.fileExists(atPath: fallback) {
-                    targetURL = URL(fileURLWithPath: fallback)
-                }
             }
         }
         
@@ -116,17 +129,19 @@ public class LiveWallpaperScreenSaverView: ScreenSaverView {
         pLayer.videoGravity = .resizeAspectFill
         layer.addSublayer(pLayer)
         self.playerLayer = pLayer
+        self.isConfigured = true
         
         // Start playback immediately
         queuePlayer.play()
     }
     
     public override func draw(_ rect: NSRect) {
-        if playerLayer == nil || player?.rate == 0 {
-            NSColor.black.setFill()
-            rect.fill()
+        if playerLayer?.player?.rate == 0 || playerLayer?.player?.currentItem == nil {
             if let image = fallbackImage {
                 image.draw(in: bounds, from: .zero, operation: .sourceOver, fraction: 1.0)
+            } else {
+                NSColor.black.setFill()
+                rect.fill()
             }
         } else {
             super.draw(rect)
@@ -135,6 +150,9 @@ public class LiveWallpaperScreenSaverView: ScreenSaverView {
     
     public override func startAnimation() {
         super.startAnimation()
+        if !isConfigured || player == nil {
+            setupPlayer()
+        }
         player?.play()
     }
     
