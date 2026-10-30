@@ -23,11 +23,16 @@ cp "$BIN_PATH" "$MACOS_DIR/LiveWallpaper"
 cp "$PROJECT_DIR/Resources/Info.plist" "$CONTENTS_DIR/Info.plist"
 echo -n "APPL????" > "$CONTENTS_DIR/PkgInfo"
 
+if [ -f "$PROJECT_DIR/Resources/AppIcon.icns" ]; then
+    cp "$PROJECT_DIR/Resources/AppIcon.icns" "$RESOURCES_DIR/AppIcon.icns"
+fi
+
 if [ -d "$PROJECT_DIR/Resources/Assets.xcassets" ]; then
     echo "==> Compiling Asset Catalog..."
     xcrun actool "$PROJECT_DIR/Resources/Assets.xcassets" \
         --compile "$RESOURCES_DIR" \
         --platform macosx \
+        --app-icon AppIcon \
         --minimum-deployment-target 13.0 \
         --output-format human-readable-text >/dev/null 2>&1 || true
 fi

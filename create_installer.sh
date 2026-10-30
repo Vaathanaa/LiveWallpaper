@@ -49,6 +49,12 @@ fi
 ln -s /Applications "$DMG_ROOT/Applications"
 ln -s "$HOME/Library/Screen Savers" "$DMG_ROOT/Screen Savers (User)"
 
+if [ -f "$PROJECT_DIR/Resources/AppIcon.icns" ]; then
+    cp "$PROJECT_DIR/Resources/AppIcon.icns" "$DMG_ROOT/.VolumeIcon.icns"
+    SetFile -c icnC "$DMG_ROOT/.VolumeIcon.icns" 2>/dev/null || true
+    SetFile -a C "$DMG_ROOT" 2>/dev/null || true
+fi
+
 # Add Quick Installation Guide
 cat << 'EOF' > "$DMG_ROOT/QUICK_INSTALL.txt"
 =============================================================
