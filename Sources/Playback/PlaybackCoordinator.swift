@@ -237,12 +237,6 @@ public final class PlaybackCoordinator: NSObject, ResourceMonitorDelegate, Video
                 playbackSpeed: settings.playbackSpeed
             )
             
-            // Sync lock screen poster frame AND native 120Hz aerial screen saver
-            if syncScreenSaver, let asset = primaryEngine.currentAsset {
-                LockScreenPosterManager.shared.updateLockScreenPoster(for: asset, at: .zero)
-                LockScreenPosterManager.shared.syncScreenSaverVideo(from: url, asset: asset)
-            }
-            
             // Rebuild/update secondary engines so all monitors receive a dedicated hardware stream
             await updateSecondaryEngines(url: url)
             
@@ -253,6 +247,18 @@ public final class PlaybackCoordinator: NSObject, ResourceMonitorDelegate, Video
             }
             
             WindowManager.shared.reconnectPlayers(coordinator: self)
+            
+            // Defer Lock Screen & Screen Saver sync by 2.5 seconds in background so startup and playback are velvety 120Hz smooth
+            if syncScreenSaver {
+                Task.detached(priority: .background) {
+                    try? await Task.sleep(nanoseconds: 2_500_000_000)
+                    let asset = AVURLAsset(url: url)
+                    await MainActor.run {
+                        LockScreenPosterManager.shared.updateLockScreenPoster(for: asset, at: .zero)
+                        LockScreenPosterManager.shared.syncScreenSaverVideo(from: url, asset: asset)
+                    }
+                }
+            }
         }
     }
     
@@ -564,12 +570,8 @@ public final class PlaybackCoordinator: NSObject, ResourceMonitorDelegate, Video
                 WindowManager.shared.setWindowsVisible(false)
             }
             
-            // If paused specifically due to lock screen, update lock screen wallpaper with current paused frame
-            if activeReasons.contains(.screenLocked) {
-                if let asset = primaryEngine.currentAsset {
-                    LockScreenPosterManager.shared.updateLockScreenPoster(for: asset, at: primaryEngine.currentTime)
-                }
-            }
+            // Note: Poster is already generated and cached on video load/selection.
+            // During lock transition, zero I/O and zero process spawns occur to ensure 100% 120Hz ProMotion smoothness!
         }
     }
     

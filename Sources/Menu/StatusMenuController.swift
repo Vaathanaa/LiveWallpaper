@@ -509,10 +509,13 @@ public final class StatusMenuController: NSObject, NSMenuDelegate {
     }
     
     @objc private func previewScreenSaver() {
-        let task = Process()
-        task.launchPath = "/usr/bin/open"
-        task.arguments = ["/System/Library/CoreServices/ScreenSaverEngine.app"]
-        try? task.run()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            let script = "tell application id \"com.apple.ScreenSaver.Engine\" to launch"
+            if let appleScript = NSAppleScript(source: script) {
+                var err: NSDictionary?
+                appleScript.executeAndReturnError(&err)
+            }
+        }
     }
     
     @objc private func openSettings() {

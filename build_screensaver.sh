@@ -44,6 +44,16 @@ cat << 'EOF' > "$SAVER_BUNDLE/Contents/Info.plist"
 </plist>
 EOF
 
+mkdir -p "$SAVER_BUNDLE/Contents/Resources"
+mkdir -p "$HOME/Movies/LiveWallpaper"
+if [ -f "$HOME/Library/Application Support/LiveWallpaper/current_wallpaper.mp4" ]; then
+  cp "$HOME/Library/Application Support/LiveWallpaper/current_wallpaper.mp4" "$SAVER_BUNDLE/Contents/Resources/current_wallpaper.mp4"
+  cp "$HOME/Library/Application Support/LiveWallpaper/current_wallpaper.mp4" "$HOME/Movies/LiveWallpaper/current_wallpaper.mp4"
+fi
+if [ -f "$HOME/Library/Application Support/LiveWallpaper/lockscreen_poster.jpg" ]; then
+  cp "$HOME/Library/Application Support/LiveWallpaper/lockscreen_poster.jpg" "$HOME/Movies/LiveWallpaper/lockscreen_poster.jpg"
+fi
+
 codesign --force --deep --sign - --options runtime "$SAVER_BUNDLE"
 rm -rf "$PROJECT_DIR/LiveWallpaper.saver"
 cp -R "$SAVER_BUNDLE" "$PROJECT_DIR/LiveWallpaper.saver"
@@ -52,7 +62,7 @@ cp -R "$SAVER_BUNDLE" "$PROJECT_DIR/LiveWallpaper.saver"
 rm -rf "$LEGACY_BUNDLE"
 cp -R "$SAVER_BUNDLE" "$LEGACY_BUNDLE"
 
-# Register in macOS currentHost screensaver preferences
-defaults -currentHost write com.apple.screensaver moduleDict -dict moduleName LiveWallpaper path "$SAVER_BUNDLE" type 0
+# Register in macOS currentHost screensaver preferences with explicit integer type
+defaults -currentHost write com.apple.screensaver moduleDict -dict moduleName LiveWallpaper path "$SAVER_BUNDLE" type -int 0
 
 echo "==> LiveWallpaper.saver built and registered successfully at $SAVER_BUNDLE"

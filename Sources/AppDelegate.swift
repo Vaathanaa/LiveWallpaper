@@ -7,6 +7,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, StatusMenuContr
     
     private var menuController: StatusMenuController!
     private var settingsWindowController: NSWindowController?
+    private var sigtermSource: DispatchSourceSignal?
+    private var sigintSource: DispatchSourceSignal?
     
     public override init() {
         super.init()
@@ -15,6 +17,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, StatusMenuContr
     
     public func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
+        setupSignalHandlers()
         
         // Save original system desktop wallpapers
         LockScreenPosterManager.shared.saveOriginalWallpapers()
@@ -28,6 +31,24 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, StatusMenuContr
         setupRemoteCommands()
         
         NSLog("[LiveWallpaper] Launched successfully.")
+    }
+    
+    private func setupSignalHandlers() {
+        signal(SIGTERM, SIG_IGN)
+        let termSource = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
+        termSource.setEventHandler {
+            NSApp.terminate(nil)
+        }
+        termSource.resume()
+        self.sigtermSource = termSource
+        
+        signal(SIGINT, SIG_IGN)
+        let intSource = DispatchSource.makeSignalSource(signal: SIGINT, queue: .main)
+        intSource.setEventHandler {
+            NSApp.terminate(nil)
+        }
+        intSource.resume()
+        self.sigintSource = intSource
     }
     
     private func setupRemoteCommands() {

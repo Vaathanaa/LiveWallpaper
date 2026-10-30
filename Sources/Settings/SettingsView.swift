@@ -255,10 +255,21 @@ public struct SettingsView: View {
                     HStack {
                         Label("macOS Native 120Hz Screen Saver", systemImage: "sparkles.tv")
                         Spacer()
-                        Button("Sync Screen Saver Now") {
+                        Button("Sync Now") {
                             if let p = settings.videoPath,
                                let asset = PlaybackCoordinator.shared.primaryEngine.currentAsset {
                                 LockScreenPosterManager.shared.syncScreenSaverVideo(from: URL(fileURLWithPath: p), asset: asset)
+                            }
+                        }
+                        .controlSize(.small)
+                        
+                        Button("Test Screen Saver") {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                let script = "tell application id \"com.apple.ScreenSaver.Engine\" to launch"
+                                if let appleScript = NSAppleScript(source: script) {
+                                    var err: NSDictionary?
+                                    appleScript.executeAndReturnError(&err)
+                                }
                             }
                         }
                         .controlSize(.small)
