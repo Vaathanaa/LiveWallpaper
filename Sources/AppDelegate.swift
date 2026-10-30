@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import Darwin
 
 @MainActor
 public final class AppDelegate: NSObject, NSApplicationDelegate, StatusMenuControllerDelegate {
@@ -9,13 +10,68 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, StatusMenuContr
     private var settingsWindowController: NSWindowController?
     private var sigtermSource: DispatchSourceSignal?
     private var sigintSource: DispatchSourceSignal?
+    private static var singleInstanceLockFD: Int32 = -1
     
     public override init() {
         super.init()
         Self.shared = self
     }
     
+    private static func acquireSingleInstanceLock() -> Bool {
+        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let appDir = appSupport.appendingPathComponent("LiveWallpaper", isDirectory: true)
+        try? FileManager.default.createDirectory(at: appDir, withIntermediateDirectories: true)
+        let lockURL = appDir.appendingPathComponent("LiveWallpaper.lock")
+        
+        let fd = open(lockURL.path, O_CREAT | O_RDWR, 0o644)
+        guard fd >= 0 else { return true }
+        
+        if flock(fd, LOCK_EX | LOCK_NB) != 0 {
+            close(fd)
+            return false // Another instance already holds the lock!
+        }
+        
+        singleInstanceLockFD = fd
+        return true
+    }
+    
     public func applicationDidFinishLaunching(_ notification: Notification) {
+        // 1. Enforce Single-Instance: If another instance of LiveWallpaper is already running, activate it and exit immediately
+        if !Self.acquireSingleInstanceLock() {
+            NSLog("[LiveWallpaper] Duplicate instance detected. Activating existing instance and exiting.")
+            
+            // Notify existing instance to bring its menu or settings to front
+            DistributedNotificationCenter.default().postNotificationName(
+                NSNotification.Name("com.local.LiveWallpaper.openSettings"),
+                object: nil,
+                userInfo: nil,
+                deliverImmediately: true
+            )
+            
+            let alert = NSAlert()
+            alert.messageText = "LiveWallpaper is Already Running"
+            alert.informativeText = "LiveWallpaper is already running and active in your top menu bar (play icon). Multiple instances cannot run simultaneously."
+            alert.alertStyle = .informational
+            alert.addButton(withTitle: "OK")
+            alert.runModal()
+            
+            exit(0)
+        }
+        
+        // 2. Warn if user launched directly from a mounted disk image (.dmg) instead of /Applications
+        if Bundle.main.bundlePath.hasPrefix("/Volumes/") {
+            let alert = NSAlert()
+            alert.messageText = "Install LiveWallpaper First"
+            alert.informativeText = "You are currently running LiveWallpaper directly from the disk image installer. Please drag LiveWallpaper to your Applications folder first so your settings and screen saver remain permanently configured."
+            alert.alertStyle = .warning
+            alert.addButton(withTitle: "Open Applications Folder")
+            alert.addButton(withTitle: "Continue Anyway")
+            if alert.runModal() == .alertFirstButtonReturn {
+                NSWorkspace.shared.open(URL(fileURLWithPath: "/Applications"))
+                exit(0)
+            }
+        }
+        
         NSApp.setActivationPolicy(.accessory)
         setupSignalHandlers()
         
@@ -169,6 +225,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, StatusMenuContr
         
         // Restore original system wallpaper
         LockScreenPosterManager.shared.restoreOriginalWallpapers()
+        
+        if Self.singleInstanceLockFD >= 0 {
+            flock(Self.singleInstanceLockFD, LOCK_UN)
+            close(Self.singleInstanceLockFD)
+            Self.singleInstanceLockFD = -1
+        }
     }
     
     public func statusMenuDidRequestSettings() {
