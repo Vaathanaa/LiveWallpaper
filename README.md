@@ -30,8 +30,6 @@
 - 🚀 **Native Metal 4 Compute Shader Engine**:
   - Procedural Raymarched Shaders (*Deep Space Nebula*, *Cyberpunk Matrix Rain*, *Minimalist Liquid Fluid*, *Northern Aurora*) running directly on GPU compute cores.
   - Slashes unified memory footprint from 120MB down to **under 15MB with 0.1% CPU**.
-- 🌐 **Curated 4K / 8K 120fps Discover Gallery**:
-  - Built-in gallery of high-bitrate royalty-free loops with 1-click download and instant wallpaper application.
 - ❄️ **Instant Freeze-Frame Pause Guarantee**:
   - Pausing never shows a black screen or blank desktop. It instantly snapshots the active frame with zero visual flicker.
 - 📱 **Zero-Glitch iPhone Mirroring & PiP**:
@@ -43,8 +41,6 @@
 - 🖱️ **3D Mouse Parallax & Dynamic Depth**:
   - Velvety spring-mass-damper physics with menu-bar and hot-corner safety cushions.
   - Automatically sleeps CADisplayLink when the cursor is idle (0.0% idle CPU).
-- 🛡️ **Companion Screen Saver**:
-  - Synchronizes active video wallpapers with macOS Lock Screen and Aerial Screen Saver (`LiveWallpaper.saver`).
 
 ---
 
@@ -97,13 +93,12 @@ open /Applications/LiveWallpaper.app
 LiveWallpaper lives unobtrusively in your macOS menu bar (`play.desktopcomputer`):
 
 - **Live Mini-Player Card**: Real-time thumbnail preview, timeline scrubber, and status badges.
-- **Studio Tab (`⌘S`)**: Video trimmer, playhead scrubber, loop mode selector, media inspector.
+- **Displays & Media Tab**: Video backdrop picker, live timeline playhead scrubber, multi-monitor configuration.
+- **Studio & Loop Tab**: Video trimmer, playhead scrubber, crossfade looper, ping-pong reversal, speed, audio mute.
 - **Atmosphere Tab**: Exposure, contrast, saturation, vignette, frost blur, widget readability cushion, dynamic color harmony.
-- **Discover Gallery**: Browse and activate curated 4K/8K 120fps wallpaper loops with 1 click.
-- **Metal 4 Shaders**: Instant GPU procedural raymarching with <15MB RAM.
-- **Multi-Display Config**: Assign separate videos per monitor or synchronize across all displays.
-- **Smart Pause & Gaming**: Auto-pause during games or heavy development tasks.
-- **Launch at Login**: Native `SMAppService` background launch.
+- **Interactive & Shaders**: Native Metal 4 compute shaders, 3D mouse parallax, weather particle overlays.
+- **Playlist & Schedule**: Multi-video rotation queue, automatic day and night mode switching.
+- **Performance & Battery**: Smart MagSafe adaptive framerate, auto-pause during games or heavy apps, launch at login.
 
 ---
 

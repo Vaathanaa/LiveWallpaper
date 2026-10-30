@@ -6,7 +6,6 @@ public struct SettingsView: View {
     @ObservedObject var settings = AppSettings.shared
     @ObservedObject var diagnostics = SystemDiagnostics.shared
     @ObservedObject var harmony = WallpaperColorHarmony.shared
-    @ObservedObject var gallery = WallpaperGalleryManager.shared
     
     @State private var selectedPlaylistIndex: Int?
     @State private var customHeavyAppText: String = ""
@@ -22,9 +21,14 @@ public struct SettingsView: View {
     
     public var body: some View {
         TabView {
+            displaysTab
+                .tabItem {
+                    Label("Displays", systemImage: "display.2")
+                }
+            
             studioTab
                 .tabItem {
-                    Label("Studio", systemImage: "sparkles.tv")
+                    Label("Studio & Loop", systemImage: "sparkles.tv")
                 }
             
             atmosphereTab
@@ -32,44 +36,19 @@ public struct SettingsView: View {
                     Label("Atmosphere", systemImage: "slider.horizontal.3")
                 }
             
-            galleryTab
-                .tabItem {
-                    Label("Discover", systemImage: "globe.americas.fill")
-                }
-            
-            generalTab
-                .tabItem {
-                    Label("Displays", systemImage: "display.2")
-                }
-            
             interactiveTab
                 .tabItem {
-                    Label("Shaders & 3D", systemImage: "cube.transparent")
-                }
-            
-            dayNightTab
-                .tabItem {
-                    Label("Day & Night", systemImage: "sun.and.horizon.fill")
+                    Label("Interactive & Shaders", systemImage: "cube.transparent")
                 }
             
             playlistTab
                 .tabItem {
-                    Label("Playlist", systemImage: "music.note.list")
+                    Label("Playlist & Schedule", systemImage: "music.note.list")
                 }
             
-            playbackTab
+            performanceTab
                 .tabItem {
-                    Label("Playback", systemImage: "play.circle")
-                }
-            
-            powerTab
-                .tabItem {
-                    Label("Smart Pause", systemImage: "gamecontroller.fill")
-                }
-            
-            diagnosticsTab
-                .tabItem {
-                    Label("Diagnostics", systemImage: "chart.xyaxis.line")
+                    Label("Performance & Battery", systemImage: "bolt.batteryblock.fill")
                 }
         }
         .tint(harmony.primaryAccent)
@@ -87,11 +66,11 @@ public struct SettingsView: View {
         }
     }
     
-    // MARK: - Tab 1: Studio & Video Trimmer
+    // MARK: - Tab 1: Displays & Media
     
-    private var studioTab: some View {
+    private var displaysTab: some View {
         Form {
-            Section(header: Text("Interactive Live Studio")) {
+            Section(header: Text("Primary Video Backdrop")) {
                 VStack(spacing: 12) {
                     // Preview Card
                     ZStack {
@@ -155,13 +134,13 @@ public struct SettingsView: View {
                             .padding(8)
                         }
                     }
-                    .frame(height: 200)
+                    .frame(height: 180)
                     
                     // Scrubber
                     let totalSec = max(0.1, PlaybackCoordinator.shared.primaryEngine.videoDurationSeconds)
                     VStack(alignment: .leading, spacing: 4) {
                         HStack {
-                            Text("Timeline Playhead Scrub:")
+                            Text("Timeline Playhead:")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                             Spacer()
@@ -176,9 +155,94 @@ public struct SettingsView: View {
                             }
                         }
                     }
+                    
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(settings.videoPath ?? "No video selected")
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                                .font(.system(.caption, design: .monospaced))
+                                .foregroundColor(.secondary)
+                        }
+                        Spacer()
+                        Button("Choose Video...") {
+                            selectVideoFile { url in
+                                PlaybackCoordinator.shared.loadVideo(url: url)
+                                refreshStudioThumbnail()
+                            }
+                        }
+                    }
                 }
             }
             
+            Section(header: Text("Multi-Display Configuration")) {
+                Picker("Display Assignment", selection: $settings.displayMode) {
+                    ForEach(DisplayMode.allCases) { mode in
+                        Text(mode.rawValue).tag(mode)
+                    }
+                }
+                .pickerStyle(.radioGroup)
+                
+                if settings.displayMode == .perDisplay {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Connected Monitors:")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                        
+                        ForEach(NSScreen.screens, id: \.self) { screen in
+                            if let displayID = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID {
+                                let key = String(displayID)
+                                let currentPath = settings.perDisplayVideoPaths[key]
+                                
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(screen.localizedName)
+                                            .fontWeight(.semibold)
+                                        Text(currentPath.flatMap { URL(fileURLWithPath: $0).lastPathComponent } ?? "Using Default Backdrop")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                            .lineLimit(1)
+                                    }
+                                    Spacer()
+                                    Button("Choose...") {
+                                        selectVideoFile { url in
+                                            PlaybackCoordinator.shared.setVideoForDisplay(url: url, displayID: displayID)
+                                        }
+                                    }
+                                    if currentPath != nil {
+                                        Button("Reset") {
+                                            PlaybackCoordinator.shared.clearVideoForDisplay(displayID: displayID)
+                                        }
+                                    }
+                                }
+                                .padding(.vertical, 4)
+                            }
+                        }
+                    }
+                }
+            }
+            
+            Section(header: Text("Window & Scaling")) {
+                Picker("Window Layer", selection: $settings.windowLevelMode) {
+                    ForEach(WindowLevelMode.allCases) { mode in
+                        Text(mode.title).tag(mode)
+                    }
+                }
+                
+                Picker("Aspect Ratio", selection: $settings.videoGravity) {
+                    Text("Aspect Fill (Full Screen)").tag(AVLayerVideoGravity.resizeAspectFill)
+                    Text("Aspect Fit (Letterbox)").tag(AVLayerVideoGravity.resizeAspect)
+                    Text("Stretch to Fill").tag(AVLayerVideoGravity.resize)
+                }
+            }
+        }
+        .formStyle(.grouped)
+    }
+    
+    // MARK: - Tab 2: Studio & Video Trimmer
+    
+    private var studioTab: some View {
+        Form {
             Section(header: Text("Precision In / Out Trimming Loop")) {
                 Toggle("Enable Custom Loop Range", isOn: $isTrimmingActive)
                     .onChange(of: isTrimmingActive) { enabled in
@@ -252,7 +316,40 @@ public struct SettingsView: View {
                 
                 Toggle("Ping-Pong Loop (Alternate Forward & Reverse)", isOn: $settings.isPingPongLoopEnabled)
                 
-                Text("Zero-copy hardware looper runs directly on the Apple Silicon media engine with 0ms transition gap.")
+                Text("Zero-copy hardware looper runs directly on Apple Silicon media engine with 0ms transition gap.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            
+            Section(header: Text("Playback Speed & Cinematic Slow-Motion")) {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("Speed:")
+                        Spacer()
+                        Text(String(format: "%.2fx %@", settings.playbackSpeed, speedDescription(settings.playbackSpeed)))
+                            .fontWeight(.semibold)
+                    }
+                    
+                    Picker("Speed Preset", selection: $settings.playbackSpeed) {
+                        Text("0.25x").tag(0.25)
+                        Text("0.50x").tag(0.50)
+                        Text("0.75x").tag(0.75)
+                        Text("1.00x").tag(1.00)
+                        Text("1.25x").tag(1.25)
+                        Text("1.50x").tag(1.50)
+                        Text("2.00x").tag(2.00)
+                    }
+                    .pickerStyle(.segmented)
+                    
+                    Text("Slow-motion playback reduces motion distraction while keeping your desktop cinematic.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            
+            Section(header: Text("Audio Settings")) {
+                Toggle("Mute Audio Track", isOn: $settings.isMuted)
+                Text("When muted, the audio track is omitted from decode pipeline to prevent power assertions.")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
@@ -300,7 +397,7 @@ public struct SettingsView: View {
                         Text("Hardware Decode")
                             .font(.caption2)
                             .foregroundColor(.secondary)
-                        Text("VideoToolbox / M3")
+                        Text("VideoToolbox / M-Series")
                             .font(.caption)
                             .fontWeight(.medium)
                     }
@@ -311,7 +408,7 @@ public struct SettingsView: View {
         .formStyle(.grouped)
     }
     
-    // MARK: - Tab 2: Atmosphere & Color Grading Studio
+    // MARK: - Tab 3: Atmosphere & Color Grading Studio
     
     private var atmosphereTab: some View {
         Form {
@@ -421,166 +518,7 @@ public struct SettingsView: View {
         .formStyle(.grouped)
     }
     
-    // MARK: - Tab 3: Discover Gallery (Curated 4K/8K 120fps Loops)
-    
-    private var galleryTab: some View {
-        Form {
-            Section(header: Text("Curated 4K / 8K 120fps Wallpaper Catalog")) {
-                Text("Free, high-bitrate royalty-free loops optimized for Liquid Retina XDR and high-refresh external monitors.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                
-                ForEach(gallery.items) { item in
-                    HStack(spacing: 12) {
-                        Image(systemName: item.previewSymbol)
-                            .font(.system(size: 20))
-                            .frame(width: 32, height: 32)
-                            .background(harmony.primaryAccent.opacity(0.15))
-                            .foregroundColor(harmony.primaryAccent)
-                            .cornerRadius(8)
-                        
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(item.title)
-                                .fontWeight(.semibold)
-                            HStack(spacing: 8) {
-                                Text(item.category)
-                                    .font(.caption2)
-                                    .padding(.horizontal, 6)
-                                    .padding(.vertical, 2)
-                                    .background(Color.secondary.opacity(0.2))
-                                    .cornerRadius(4)
-                                
-                                Text(item.resolution)
-                                    .font(.caption2)
-                                    .foregroundColor(.secondary)
-                                
-                                Text(item.fps)
-                                    .font(.caption2)
-                                    .foregroundColor(.secondary)
-                                
-                                Text(String(format: "%.1f MB", item.fileSizeMB))
-                                    .font(.caption2)
-                                    .foregroundColor(.secondary)
-                            }
-                        }
-                        
-                        Spacer()
-                        
-                        if let progress = gallery.downloadProgress[item.id] {
-                            ProgressView(value: progress)
-                                .frame(width: 80)
-                        } else if gallery.isDownloaded(item) {
-                            Button("Apply Wallpaper") {
-                                PlaybackCoordinator.shared.loadVideo(url: gallery.localURL(for: item))
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .controlSize(.small)
-                        } else {
-                            Button("Download & Set") {
-                                Task {
-                                    await gallery.downloadAndApply(item: item)
-                                }
-                            }
-                            .controlSize(.small)
-                        }
-                    }
-                    .padding(.vertical, 4)
-                }
-            }
-        }
-        .formStyle(.grouped)
-    }
-    
-    // MARK: - Tab 4: Displays & Configuration
-    
-    private var generalTab: some View {
-        Form {
-            Section(header: Text("Primary Video Backdrop")) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(settings.videoPath ?? "No video selected")
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                            .font(.system(.body, design: .monospaced))
-                        
-                        Text("Default live wallpaper stream used across displays.")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                    Spacer()
-                    Button("Choose Video...") {
-                        selectVideoFile { url in
-                            PlaybackCoordinator.shared.loadVideo(url: url)
-                        }
-                    }
-                }
-            }
-            
-            Section(header: Text("Multi-Display Configuration")) {
-                Picker("Display Assignment", selection: $settings.displayMode) {
-                    ForEach(DisplayMode.allCases) { mode in
-                        Text(mode.rawValue).tag(mode)
-                    }
-                }
-                .pickerStyle(.radioGroup)
-                
-                if settings.displayMode == .perDisplay {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Connected Monitors:")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                        
-                        ForEach(NSScreen.screens, id: \.self) { screen in
-                            if let displayID = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID {
-                                let key = String(displayID)
-                                let currentPath = settings.perDisplayVideoPaths[key]
-                                
-                                HStack {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(screen.localizedName)
-                                            .fontWeight(.semibold)
-                                        Text(currentPath.flatMap { URL(fileURLWithPath: $0).lastPathComponent } ?? "Using Default Backdrop")
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
-                                            .lineLimit(1)
-                                    }
-                                    Spacer()
-                                    Button("Choose...") {
-                                        selectVideoFile { url in
-                                            PlaybackCoordinator.shared.setVideoForDisplay(url: url, displayID: displayID)
-                                        }
-                                    }
-                                    if currentPath != nil {
-                                        Button("Reset") {
-                                            PlaybackCoordinator.shared.clearVideoForDisplay(displayID: displayID)
-                                        }
-                                    }
-                                }
-                                .padding(.vertical, 4)
-                            }
-                        }
-                    }
-                }
-            }
-            
-            Section(header: Text("Window & Scaling")) {
-                Picker("Window Layer", selection: $settings.windowLevelMode) {
-                    ForEach(WindowLevelMode.allCases) { mode in
-                        Text(mode.title).tag(mode)
-                    }
-                }
-                
-                Picker("Aspect Ratio", selection: $settings.videoGravity) {
-                    Text("Aspect Fill (Full Screen)").tag(AVLayerVideoGravity.resizeAspectFill)
-                    Text("Aspect Fit (Letterbox)").tag(AVLayerVideoGravity.resizeAspect)
-                    Text("Stretch to Fill").tag(AVLayerVideoGravity.resize)
-                }
-            }
-        }
-        .formStyle(.grouped)
-    }
-    
-    // MARK: - Tab 5: Shaders & 3D Interactive Content
+    // MARK: - Tab 4: Interactive & Shaders
     
     private var interactiveTab: some View {
         Form {
@@ -605,7 +543,7 @@ public struct SettingsView: View {
                         }
                     }
                     
-                    Text("Direct Apple Silicon GPU pipeline: <15 MB Unified RAM, 0.1% CPU, and native ProMotion 120Hz/200Hz frame delivery.")
+                    Text("Direct Apple Silicon GPU pipeline: <15 MB Unified RAM, 0.1% CPU, and native ProMotion 120Hz frame delivery.")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
@@ -679,82 +617,7 @@ public struct SettingsView: View {
         .formStyle(.grouped)
     }
     
-    // MARK: - Tab 6: Day & Night Mode
-    
-    private var dayNightTab: some View {
-        Form {
-            Section(header: Text("Automatic Day / Night Wallpapers")) {
-                Toggle("Enable Day & Night Wallpaper Switching", isOn: $settings.isDayNightEnabled)
-                
-                if settings.isDayNightEnabled {
-                    Picker("Trigger Mode", selection: $settings.dayNightTrigger) {
-                        ForEach(DayNightTrigger.allCases) { trigger in
-                            Text(trigger.rawValue).tag(trigger)
-                        }
-                    }
-                    
-                    if settings.dayNightTrigger == .timeOfDay {
-                        HStack {
-                            Picker("Day Starts At:", selection: $settings.dayStartHour) {
-                                ForEach(0..<24) { h in
-                                    Text(String(format: "%02d:00", h)).tag(h)
-                                }
-                            }
-                            Spacer()
-                            Picker("Night Starts At:", selection: $settings.nightStartHour) {
-                                ForEach(0..<24) { h in
-                                    Text(String(format: "%02d:00", h)).tag(h)
-                                }
-                            }
-                        }
-                    }
-                    
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Day Backdrop:")
-                                .fontWeight(.semibold)
-                            Text(settings.dayVideoPath.flatMap { URL(fileURLWithPath: $0).lastPathComponent } ?? "Not configured")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                        Spacer()
-                        Button("Choose Day Video...") {
-                            selectVideoFile { url in
-                                settings.dayVideoPath = url.path
-                                if let bookmark = SecurityBookmarkManager.shared.createBookmark(for: url) {
-                                    settings.dayVideoBookmark = bookmark
-                                }
-                                PlaybackCoordinator.shared.evaluateDayNightMode()
-                            }
-                        }
-                    }
-                    
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Night Backdrop:")
-                                .fontWeight(.semibold)
-                            Text(settings.nightVideoPath.flatMap { URL(fileURLWithPath: $0).lastPathComponent } ?? "Not configured")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                        Spacer()
-                        Button("Choose Night Video...") {
-                            selectVideoFile { url in
-                                settings.nightVideoPath = url.path
-                                if let bookmark = SecurityBookmarkManager.shared.createBookmark(for: url) {
-                                    settings.nightVideoBookmark = bookmark
-                                }
-                                PlaybackCoordinator.shared.evaluateDayNightMode()
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        .formStyle(.grouped)
-    }
-    
-    // MARK: - Tab 7: Playlist & Shuffle
+    // MARK: - Tab 5: Playlist & Schedule
     
     private var playlistTab: some View {
         Form {
@@ -836,41 +699,83 @@ public struct SettingsView: View {
                     }
                 }
             }
+            
+            Section(header: Text("Automatic Day / Night Wallpapers")) {
+                Toggle("Enable Day & Night Wallpaper Switching", isOn: $settings.isDayNightEnabled)
+                
+                if settings.isDayNightEnabled {
+                    Picker("Trigger Mode", selection: $settings.dayNightTrigger) {
+                        ForEach(DayNightTrigger.allCases) { trigger in
+                            Text(trigger.rawValue).tag(trigger)
+                        }
+                    }
+                    
+                    if settings.dayNightTrigger == .timeOfDay {
+                        HStack {
+                            Picker("Day Starts At:", selection: $settings.dayStartHour) {
+                                ForEach(0..<24) { h in
+                                    Text(String(format: "%02d:00", h)).tag(h)
+                                }
+                            }
+                            Spacer()
+                            Picker("Night Starts At:", selection: $settings.nightStartHour) {
+                                ForEach(0..<24) { h in
+                                    Text(String(format: "%02d:00", h)).tag(h)
+                                }
+                            }
+                        }
+                    }
+                    
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Day Backdrop:")
+                                .fontWeight(.semibold)
+                            Text(settings.dayVideoPath.flatMap { URL(fileURLWithPath: $0).lastPathComponent } ?? "Not configured")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        Spacer()
+                        Button("Choose Day Video...") {
+                            selectVideoFile { url in
+                                settings.dayVideoPath = url.path
+                                if let bookmark = SecurityBookmarkManager.shared.createBookmark(for: url) {
+                                    settings.dayVideoBookmark = bookmark
+                                }
+                                PlaybackCoordinator.shared.evaluateDayNightMode()
+                            }
+                        }
+                    }
+                    
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Night Backdrop:")
+                                .fontWeight(.semibold)
+                            Text(settings.nightVideoPath.flatMap { URL(fileURLWithPath: $0).lastPathComponent } ?? "Not configured")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        Spacer()
+                        Button("Choose Night Video...") {
+                            selectVideoFile { url in
+                                settings.nightVideoPath = url.path
+                                if let bookmark = SecurityBookmarkManager.shared.createBookmark(for: url) {
+                                    settings.nightVideoBookmark = bookmark
+                                }
+                                PlaybackCoordinator.shared.evaluateDayNightMode()
+                            }
+                        }
+                    }
+                }
+            }
         }
         .formStyle(.grouped)
     }
     
-    // MARK: - Tab 8: Playback & Speed
+    // MARK: - Tab 6: Performance & Battery
     
-    private var playbackTab: some View {
+    private var performanceTab: some View {
         Form {
-            Section(header: Text("Playback Speed & Cinematic Slow-Motion")) {
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Text("Speed:")
-                        Spacer()
-                        Text(String(format: "%.2fx %@", settings.playbackSpeed, speedDescription(settings.playbackSpeed)))
-                            .fontWeight(.semibold)
-                    }
-                    
-                    Picker("Speed Preset", selection: $settings.playbackSpeed) {
-                        Text("0.25x").tag(0.25)
-                        Text("0.50x").tag(0.50)
-                        Text("0.75x").tag(0.75)
-                        Text("1.00x").tag(1.00)
-                        Text("1.25x").tag(1.25)
-                        Text("1.50x").tag(1.50)
-                        Text("2.00x").tag(2.00)
-                    }
-                    .pickerStyle(.segmented)
-                    
-                    Text("Slow-motion playback reduces motion distraction while keeping your desktop cinematic.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-            }
-            
-            Section(header: Text("Smart Battery Profiles & MagSafe Adaptivity")) {
+            Section(header: Text("Framerate & ProMotion 120Hz")) {
                 Toggle("Enable Smart Adaptive Framerate", isOn: $settings.isAdaptiveFramerateEnabled)
                 
                 if settings.isAdaptiveFramerateEnabled {
@@ -911,27 +816,6 @@ public struct SettingsView: View {
                 }
             }
             
-            Section(header: Text("Audio Settings")) {
-                Toggle("Mute Audio Track", isOn: $settings.isMuted)
-                Text("When muted, the audio track is omitted from decode pipeline to prevent power assertions.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-            
-            Section(header: Text("System Integration")) {
-                Toggle("Launch at Login", isOn: Binding(
-                    get: { settings.isLaunchAtLoginEnabled },
-                    set: { settings.setLaunchAtLogin($0) }
-                ))
-            }
-        }
-        .formStyle(.grouped)
-    }
-    
-    // MARK: - Tab 9: Smart Pause & Gaming
-    
-    private var powerTab: some View {
-        Form {
             Section(header: Text("Smart Game & Heavy App Auto-Pause")) {
                 Toggle("Auto-Pause when Heavy Apps / Games are Running", isOn: $settings.isHeavyAppPauseEnabled)
                 
@@ -990,24 +874,13 @@ public struct SettingsView: View {
                 Toggle("Pause on Thermal Throttling", isOn: $settings.pauseOnThermalThrottling)
             }
             
-            Section(header: Text("Idle Memory Purge")) {
-                HStack {
-                    Slider(value: $settings.idleBufferReleaseSeconds, in: 5...60, step: 5)
-                    Text("\(Int(settings.idleBufferReleaseSeconds))s")
-                        .frame(width: 40, alignment: .trailing)
-                }
-                Text("Drops hardware decode buffers from RAM when paused.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+            Section(header: Text("System Integration")) {
+                Toggle("Launch at Login", isOn: Binding(
+                    get: { settings.isLaunchAtLoginEnabled },
+                    set: { settings.setLaunchAtLogin($0) }
+                ))
             }
-        }
-        .formStyle(.grouped)
-    }
-    
-    // MARK: - Tab 10: Diagnostics
-    
-    private var diagnosticsTab: some View {
-        Form {
+            
             Section(header: Text("Real-Time \(SystemDiagnostics.chipModelName) Metrics")) {
                 HStack {
                     Label("App CPU Usage", systemImage: "cpu")
@@ -1032,44 +905,16 @@ public struct SettingsView: View {
                 }
                 
                 HStack {
-                    Label("Low Power Mode", systemImage: "leaf.fill")
-                    Spacer()
-                    Text(diagnostics.isLowPowerMode ? "Active" : "Disabled")
-                }
-                
-                HStack {
                     Label("Thermal State", systemImage: "thermometer.medium")
                     Spacer()
                     Text(diagnostics.thermalStateDescription)
                 }
-            }
-            
-            Section(header: Text("Active Pause Conditions")) {
-                if diagnostics.activePauseReasons.isEmpty {
-                    Label("None — Playing normally", systemImage: "checkmark.circle.fill")
-                        .foregroundColor(.green)
-                } else {
-                    ForEach(diagnostics.activePauseReasons, id: \.self) { reason in
-                        Label(reason, systemImage: "pause.circle.fill")
-                            .foregroundColor(.orange)
-                    }
-                }
-            }
-            
-            Section(header: Text("Privacy & Security Audit")) {
+                
                 HStack {
-                    Label("Sandboxed Hardened Runtime", systemImage: "lock.shield.fill")
+                    Label("Active Status", systemImage: diagnostics.activePauseReasons.isEmpty ? "play.circle.fill" : "pause.circle.fill")
                     Spacer()
-                    Text("Verified")
-                        .foregroundColor(.green)
-                        .fontWeight(.medium)
-                }
-                HStack {
-                    Label("Zero Telemetry / 100% Local", systemImage: "hand.raised.fill")
-                    Spacer()
-                    Text("Compliant")
-                        .foregroundColor(.green)
-                        .fontWeight(.medium)
+                    Text(diagnostics.activePauseReasons.isEmpty ? "Playing (0 dropped frames)" : diagnostics.activePauseReasons.joined(separator: ", "))
+                        .foregroundColor(diagnostics.activePauseReasons.isEmpty ? .green : .orange)
                 }
             }
         }
