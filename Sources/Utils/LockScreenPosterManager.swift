@@ -202,6 +202,14 @@ public final class LockScreenPosterManager {
                 syncFileIfNeeded(from: sourceURL, to: moviesVideo)
                 syncFileIfNeeded(from: sourceURL, to: containerVideo)
                 
+                // Sync bundle resources directly into the .saver bundle so sandboxed legacyScreenSaver has instant access
+                let saverResourceVideo = home.appendingPathComponent("Library/Screen Savers/LiveWallpaper.saver/Contents/Resources/current_wallpaper.mp4")
+                let legacyResourceVideo = home.appendingPathComponent("Library/Screen Savers/VideoBackdrop.saver/Contents/Resources/current_wallpaper.mp4")
+                try? FileManager.default.createDirectory(at: saverResourceVideo.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try? FileManager.default.createDirectory(at: legacyResourceVideo.deletingLastPathComponent(), withIntermediateDirectories: true)
+                syncFileIfNeeded(from: sourceURL, to: saverResourceVideo)
+                syncFileIfNeeded(from: sourceURL, to: legacyResourceVideo)
+                
                 // Sync all native macOS aerial slots so WallpaperAgent ALWAYS plays the live video
                 for aerialID in officialAerialIDs {
                     let aerialTarget = aerialVideosDir.appendingPathComponent("\(aerialID).mov")
@@ -236,6 +244,17 @@ public final class LockScreenPosterManager {
                 task.executableURL = URL(fileURLWithPath: "/usr/bin/defaults")
                 task.arguments = ["-currentHost", "write", "com.apple.screensaver", "moduleDict", "-dict", "moduleName", "LiveWallpaper", "path", saverPath, "type", "-int", "0"]
                 try? task.run()
+                
+                // Ensure System Events has LiveWallpaper set as the current active screen saver
+                let tellSystemEvents = """
+                tell application "System Events"
+                    set current screen saver to screen saver "LiveWallpaper"
+                end tell
+                """
+                if let appleScript = NSAppleScript(source: tellSystemEvents) {
+                    var err: NSDictionary?
+                    appleScript.executeAndReturnError(&err)
+                }
                 
                 // Duplicate to VideoBackdrop.saver so whichever saver macOS looks for, it works!
                 let legacySaver = "\(home.path)/Library/Screen Savers/VideoBackdrop.saver"

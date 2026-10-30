@@ -265,7 +265,12 @@ public struct SettingsView: View {
                         
                         Button("Test Screen Saver") {
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                                let script = "tell application id \"com.apple.ScreenSaver.Engine\" to launch"
+                                let script = """
+                                tell application "System Events"
+                                    set current screen saver to screen saver "LiveWallpaper"
+                                    start current screen saver
+                                end tell
+                                """
                                 if let appleScript = NSAppleScript(source: script) {
                                     var err: NSDictionary?
                                     appleScript.executeAndReturnError(&err)
