@@ -10,6 +10,8 @@ xcuserdata/
 *.app/
 *.saver/
 *.dmg
+*.pkg
+dist/
 LiveWallpaper.app/
 LiveWallpaper.saver/
 VideoBackdrop.app/

@@ -1,103 +1,98 @@
-# Installation Guide
+# LiveWallpaper Installation & Distribution Guide
 
-This guide details how to download, build, and install **LiveWallpaper** on your Mac into `/Applications`.
-
----
-
-## 📋 System Requirements
-- **Hardware**: Any Mac with Apple Silicon (**M1, M2, M3, M4** — Base, Pro, Max, or Ultra).
-- **macOS Version**: macOS 13.0 (Ventura), macOS 14.0 (Sonoma), macOS 15.0 (Sequoia), or later.
-- **Xcode / Command Line Tools**: Xcode 15+ or Command Line Tools installed (`xcode-select --install`).
+Choose the installation method that fits your workflow best. All methods install natively into `/Applications` on Apple Silicon Macs (**M1, M2, M3, M4**).
 
 ---
 
 ## 🚀 Installation Options
 
-### Option 1: Install via Homebrew Cask
+### Option 1: 1-Line Terminal Quick Install (Recommended)
+Open **Terminal** and paste:
 
 ```bash
-# Clone the repository
-git clone https://github.com/Vaathanaa/LiveWallpaper.git
-cd LiveWallpaper
+curl -fsSL https://raw.githubusercontent.com/Vaathanaa/LiveWallpaper/main/install.sh | bash
+```
 
-# Install via Homebrew Cask formula
+**What this does automatically:**
+- Detects your Apple Silicon architecture.
+- Installs `LiveWallpaper.app` directly into `/Applications`.
+- Installs `LiveWallpaper.saver` into your screen savers directory.
+- Clears Gatekeeper quarantine attributes (`xattr -cr`).
+- Registers and launches the app into your menu bar.
+
+---
+
+### Option 2: Guided macOS Installer Wizard (`.pkg`)
+For enterprise users or those who prefer a traditional macOS installer wizard:
+
+1. Download **`LiveWallpaper-Installer-1.2.0.pkg`** from [Latest Releases](https://github.com/Vaathanaa/LiveWallpaper/releases/latest).
+2. Double-click the `.pkg` file.
+3. Follow the guided installation wizard.
+4. Launch `LiveWallpaper` from `/Applications` or Spotlight.
+
+---
+
+### Option 3: Drag-and-Drop Disk Image (`.dmg`)
+1. Download **`LiveWallpaper-1.2.0.dmg`** from [Latest Releases](https://github.com/Vaathanaa/LiveWallpaper/releases/latest).
+2. Double-click to mount the `.dmg`.
+3. Drag **`LiveWallpaper.app`** to the **Applications** folder shortcut.
+4. *(Optional)* Drag **`LiveWallpaper.saver`** to **Screen Savers**.
+
+---
+
+### Option 4: Homebrew Cask
+
+```bash
+# Direct Cask installation from repo:
 brew install --cask ./Casks/livewallpaper.rb
 ```
 
 ---
 
-### Option 2: Automatic 1-Click Build & Install to `/Applications`
-
-Open **Terminal** and run:
+### Option 5: Build from Source
 
 ```bash
-# 1. Clone the repository
 git clone https://github.com/Vaathanaa/LiveWallpaper.git
 cd LiveWallpaper
 
-# 2. Run the automated build and installation script
+# Build app and screen saver
 ./build_app.sh
-```
-
-The script will automatically:
-1. Compile the native Apple Silicon binary with release optimizations (`swift build -c release`).
-2. Package the macOS `.app` bundle.
-3. Sign it with Apple Hardened Runtime and App Sandbox entitlements.
-4. Install it directly into `/Applications/LiveWallpaper.app`.
-
-To launch the app immediately:
-
-```bash
-open /Applications/LiveWallpaper.app
-```
-
----
-
-## 🖥️ Installing the Companion Screen Saver
-
-To install the matching aerial screen saver into macOS:
-
-```bash
 ./build_screensaver.sh
+
+# Launch immediately
+open /Applications/LiveWallpaper.app
 ```
 
-This compiles and signs `LiveWallpaper.saver` directly into `~/Library/Screen Savers/LiveWallpaper.saver`. You can immediately preview and select it in **System Settings > Wallpaper / Screen Saver**.
+To create your own standalone `.dmg` and `.pkg` installers:
+
+```bash
+./create_installer.sh
+```
+The output installers will be generated inside the `./dist` folder.
 
 ---
 
-## 🛡️ macOS Security & Gatekeeper Troubleshooting
+## 🛡️ macOS Security & Gatekeeper Note
 
-When opening an ad-hoc signed app for the first time:
+Because LiveWallpaper is distributed independently as an open-source binary:
 
-### Method A: Right-Click Open
-1. Open Finder and go to `/Applications`.
-2. **Right-click** (or `Control`-click) on **`LiveWallpaper.app`**.
-3. Select **Open**.
-4. In the dialog, click **Open** to confirm.
-
-### Method B: Terminal Command (Clear Quarantine)
-If macOS displays a warning that the developer cannot be verified:
-
-```bash
-xattr -cr /Applications/LiveWallpaper.app
-open /Applications/LiveWallpaper.app
-```
+If macOS displays a notice that the developer cannot be verified upon first launch:
+1. **Right-click** (or `Control`-click) on `/Applications/LiveWallpaper.app`.
+2. Select **Open**, then click **Open** in the dialog.
+3. Or run this one-line command in Terminal:
+   ```bash
+   xattr -cr /Applications/LiveWallpaper.app
+   ```
 
 ---
 
 ## 🗑️ Uninstallation
 
-LiveWallpaper has no scattered background daemons or kernel extensions. To remove it:
+LiveWallpaper has no background daemons or kernel extensions:
 
 ```bash
-# Terminate the running instance
 killall LiveWallpaper 2>/dev/null || true
-
-# Remove the application bundle
 rm -rf /Applications/LiveWallpaper.app
 rm -rf ~/Library/Screen\ Savers/LiveWallpaper.saver
-
-# Optional: Remove user preferences, downloaded gallery loops, and cached posters
 rm -rf ~/Library/Application\ Support/LiveWallpaper
-defaults delete com.local.LiveWallpaper 2>/dev/null || true
 ```

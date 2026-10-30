@@ -22,32 +22,23 @@ jobs:
 
       - name: Build LiveWallpaper App & Screen Saver
         run: |
-          chmod +x build_app.sh build_screensaver.sh
+          chmod +x build_app.sh build_screensaver.sh create_installer.sh install.sh
           ./build_app.sh
           ./build_screensaver.sh
 
-      - name: Create DMG Distribution Package
+      - name: Create DMG & PKG Distribution Packages
         run: |
-          VERSION=${GITHUB_REF_NAME:-v1.2.0}
-          DMG_NAME="LiveWallpaper-${VERSION}.dmg"
-          
-          mkdir -p dmg_root
-          cp -R LiveWallpaper.app dmg_root/
-          cp -R LiveWallpaper.saver dmg_root/
-          ln -s /Applications dmg_root/Applications
-          
-          hdiutil create -volname "LiveWallpaper" -srcfolder dmg_root -ov -format UDZO "${DMG_NAME}"
-          shasum -a 256 "${DMG_NAME}" > "${DMG_NAME}.sha256"
-          
-          echo "DMG_NAME=${DMG_NAME}" >> $GITHUB_ENV
+          ./create_installer.sh
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: |
-            ${{ env.DMG_NAME }}
-            ${{ env.DMG_NAME }}.sha256
+            dist/*.dmg
+            dist/*.dmg.sha256
+            dist/*.pkg
+            dist/*.pkg.sha256
           draft: false
           prerelease: false
           generate_release_notes: true
