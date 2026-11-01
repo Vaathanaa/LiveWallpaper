@@ -34,8 +34,8 @@ curl -fsSL https://raw.githubusercontent.com/Vaathanaa/LiveWallpaper/main/instal
 
 ### Option 2: Guided Installer (`.pkg`) or Disk Image (`.dmg`)
 
-- 📦 **[Download LiveWallpaper-Installer-1.2.0.pkg](https://github.com/Vaathanaa/LiveWallpaper/releases/latest)** — Guided double-click macOS installation wizard.
-- 💽 **[Download LiveWallpaper-1.2.0.dmg](https://github.com/Vaathanaa/LiveWallpaper/releases/latest)** — Standard drag-and-drop disk image with `/Applications` shortcut.
+- 📦 **[Download LiveWallpaper-Installer-1.2.1.pkg](https://github.com/Vaathanaa/LiveWallpaper/releases/latest)** — Guided double-click macOS installation wizard.
+- 💽 **[Download LiveWallpaper-1.2.1.dmg](https://github.com/Vaathanaa/LiveWallpaper/releases/latest)** — Standard drag-and-drop disk image with `/Applications` shortcut.
 
 ### Option 3: Homebrew Cask
 
