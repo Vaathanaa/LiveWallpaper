@@ -4,7 +4,7 @@ import UniformTypeIdentifiers
 
 public struct MenuBarView: View {
     @ObservedObject private var settings = AppSettings.shared
-    @State private var isPlaying: Bool = PlaybackCoordinator.shared.primaryEngine.isPlaying
+    @ObservedObject private var coordinator = PlaybackCoordinator.shared
     
     public init() {}
     
@@ -12,11 +12,10 @@ public struct MenuBarView: View {
         VStack {
             // Play / Pause Quick Control
             Button(action: {
-                PlaybackCoordinator.shared.togglePlayPause()
-                isPlaying = PlaybackCoordinator.shared.primaryEngine.isPlaying
+                coordinator.togglePlayPause()
             }) {
-                Label(isPlaying ? "Pause Wallpaper" : "Play Wallpaper",
-                      systemImage: isPlaying ? "pause.fill" : "play.fill")
+                Label(coordinator.isPlaying ? "Pause Wallpaper" : "Play Wallpaper",
+                      systemImage: coordinator.isPlaying ? "pause.fill" : "play.fill")
             }
             .keyboardShortcut("p", modifiers: .command)
             
@@ -30,7 +29,7 @@ public struct MenuBarView: View {
             
             // Audio Mute Quick Toggle
             Button(action: {
-                PlaybackCoordinator.shared.toggleMute()
+                coordinator.toggleMute()
             }) {
                 Label(settings.isMuted ? "Unmute Audio" : "Mute Audio",
                       systemImage: settings.isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill")
@@ -41,14 +40,14 @@ public struct MenuBarView: View {
             if settings.isPlaylistEnabled && !settings.playlistVideos.isEmpty {
                 Divider()
                 Button(action: {
-                    PlaybackCoordinator.shared.advancePlaylist(direction: .next)
+                    coordinator.advancePlaylist(direction: .next)
                 }) {
                     Label("Next in Playlist", systemImage: "forward.end.fill")
                 }
                 .keyboardShortcut("]", modifiers: .command)
                 
                 Button(action: {
-                    PlaybackCoordinator.shared.advancePlaylist(direction: .previous)
+                    coordinator.advancePlaylist(direction: .previous)
                 }) {
                     Label("Previous in Playlist", systemImage: "backward.end.fill")
                 }
@@ -82,31 +81,41 @@ public struct MenuBarView: View {
             .keyboardShortcut("q", modifiers: .command)
         }
         .onAppear {
-            isPlaying = PlaybackCoordinator.shared.primaryEngine.isPlaying
             settings.refreshLaunchAtLoginStatus()
         }
     }
     
     private func chooseVideo() {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = true
-        panel.canChooseDirectories = false
-        panel.allowsMultipleSelection = false
-        
-        var types: [UTType] = [.movie, .video, .mpeg4Movie, .quickTimeMovie]
-        if let m4v = UTType(filenameExtension: "m4v") { types.append(m4v) }
-        if let mp4 = UTType(filenameExtension: "mp4") { types.append(mp4) }
-        panel.allowedContentTypes = types
-        panel.prompt = "Set as Backdrop"
-        panel.message = "Choose a video file (.mp4, .mov, .m4v) for your desktop backdrop:"
-        panel.level = .floating
-        panel.center()
-        
-        NSApp.activate(ignoringOtherApps: true)
-        
-        if panel.runModal() == .OK, let url = panel.url {
-            AppSettings.shared.contentType = .video
-            PlaybackCoordinator.shared.loadVideo(url: url)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            let panel = NSOpenPanel()
+            panel.canChooseFiles = true
+            panel.canChooseDirectories = false
+            panel.allowsMultipleSelection = false
+            
+            var types: [UTType] = [.movie, .video, .mpeg4Movie, .quickTimeMovie]
+            if let m4v = UTType(filenameExtension: "m4v") { types.append(m4v) }
+            if let mp4 = UTType(filenameExtension: "mp4") { types.append(mp4) }
+            panel.allowedContentTypes = types
+            panel.prompt = "Set as Backdrop"
+            panel.message = "Choose a video file (.mp4, .mov, .m4v) for your desktop backdrop:"
+            panel.level = .floating
+            panel.center()
+            
+            let previousPolicy = NSApp.activationPolicy()
+            if previousPolicy != .regular {
+                NSApp.setActivationPolicy(.regular)
+            }
+            NSApp.activate(ignoringOtherApps: true)
+            
+            let response = panel.runModal()
+            if previousPolicy != .regular && AppDelegate.shared?.isSettingsWindowVisible != true {
+                NSApp.setActivationPolicy(.accessory)
+            }
+            
+            if response == .OK, let url = panel.url {
+                AppSettings.shared.contentType = .video
+                PlaybackCoordinator.shared.loadVideo(url: url)
+            }
         }
     }
 }

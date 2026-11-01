@@ -5,7 +5,7 @@ import QuartzCore
 @MainActor
 public final class BackdropWindowController: NSWindowController {
     
-    public let screen: NSScreen
+    public private(set) var screen: NSScreen
     public let displayID: CGDirectDisplayID
     
     private let backdropWindow: BackdropWindow
@@ -437,6 +437,7 @@ public final class BackdropWindowController: NSWindowController {
     }
     
     public func updateScreenConfiguration(_ newScreen: NSScreen) {
+        self.screen = newScreen
         backdropWindow.updateFrame(for: newScreen)
         let newBounds = NSRect(origin: .zero, size: newScreen.frame.size)
         

@@ -29,6 +29,9 @@ public final class SecurityBookmarkManager {
         }
     }
     
+    private var activeSecurityScopedURLs = Set<URL>()
+    private let lock = NSLock()
+    
     /// Resolves bookmark data back to a usable URL and starts security access if needed.
     public func resolveBookmark(_ data: Data) -> (url: URL, isStale: Bool)? {
         var isStale = false
@@ -40,7 +43,9 @@ public final class SecurityBookmarkManager {
                 bookmarkDataIsStale: &isStale
             )
             if url.startAccessingSecurityScopedResource() {
-                // Successfully started accessing security scoped resource
+                lock.lock()
+                activeSecurityScopedURLs.insert(url)
+                lock.unlock()
             }
             return (url, isStale)
         } catch {
@@ -61,6 +66,21 @@ public final class SecurityBookmarkManager {
     
     /// Stops accessing a security scoped resource URL.
     public func stopAccessing(url: URL) {
-        url.stopAccessingSecurityScopedResource()
+        lock.lock()
+        if let match = activeSecurityScopedURLs.first(where: { $0.standardizedFileURL == url.standardizedFileURL }) {
+            match.stopAccessingSecurityScopedResource()
+            activeSecurityScopedURLs.remove(match)
+        }
+        lock.unlock()
+    }
+    
+    /// Stops accessing all active security scoped URLs.
+    public func stopAccessingAll() {
+        lock.lock()
+        for url in activeSecurityScopedURLs {
+            url.stopAccessingSecurityScopedResource()
+        }
+        activeSecurityScopedURLs.removeAll()
+        lock.unlock()
     }
 }

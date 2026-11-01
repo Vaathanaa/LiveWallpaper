@@ -258,6 +258,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, StatusMenuContr
         settingsWindowController?.window?.makeKeyAndOrderFront(nil)
     }
     
+    public var isSettingsWindowVisible: Bool {
+        return settingsWindowController?.window?.isVisible == true
+    }
+    
     public func windowWillClose(_ notification: Notification) {
         if let window = notification.object as? NSWindow, window === settingsWindowController?.window {
             SystemDiagnostics.shared.stopMonitoring()

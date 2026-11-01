@@ -215,8 +215,13 @@ public final class ResourceMonitor: NSObject, OcclusionDetectorDelegate {
     
     @objc private func sessionDidBecomeActiveReceived() {
         isSessionActive = true
+        if !Self.isCurrentlyScreenLocked() {
+            isScreenLocked = false
+        }
         evaluateAllConditions()
-        delegate?.resourceMonitorDidWakeOrUnlock()
+        if !isScreenLocked {
+            delegate?.resourceMonitorDidWakeOrUnlock()
+        }
     }
     
     @objc private func sessionDidChangeReceived() {
@@ -246,7 +251,9 @@ public final class ResourceMonitor: NSObject, OcclusionDetectorDelegate {
         isScreenAsleep = false
         startTimersAfterWake()
         evaluateAllConditions()
-        delegate?.resourceMonitorDidWakeOrUnlock()
+        if !isScreenLocked {
+            delegate?.resourceMonitorDidWakeOrUnlock()
+        }
     }
     
     @objc private func systemWillSleepReceived() {
@@ -260,7 +267,9 @@ public final class ResourceMonitor: NSObject, OcclusionDetectorDelegate {
         isSystemAsleep = false
         startTimersAfterWake()
         evaluateAllConditions()
-        delegate?.resourceMonitorDidWakeOrUnlock()
+        if !isScreenLocked {
+            delegate?.resourceMonitorDidWakeOrUnlock()
+        }
     }
     
     @objc private func themeChangedReceived() {
@@ -354,11 +363,9 @@ public final class ResourceMonitor: NSObject, OcclusionDetectorDelegate {
         let settings = AppSettings.shared
         var reasons: Set<PauseReason> = []
         
-        // Authoritative console check: if unlocked, clear isScreenLocked immediately
+        // Console check: if confirmed locked in CGSession, ensure isScreenLocked is true
         if Self.isCurrentlyScreenLocked() {
             isScreenLocked = true
-        } else {
-            isScreenLocked = false
         }
         
         if settings.isUserPaused {
@@ -385,7 +392,7 @@ public final class ResourceMonitor: NSObject, OcclusionDetectorDelegate {
         if settings.pauseOnBattery && Self.isOnBatteryPower() {
             reasons.insert(.onBattery)
         }
-        if ProcessInfo.processInfo.isLowPowerModeEnabled {
+        if settings.pauseOnLowPowerMode && ProcessInfo.processInfo.isLowPowerModeEnabled {
             reasons.insert(.lowPowerMode)
         }
         if settings.pauseOnThermalThrottling {

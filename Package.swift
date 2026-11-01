@@ -13,6 +13,11 @@ let package = Package(
         .executableTarget(
             name: "LiveWallpaper",
             path: "Sources"
+        ),
+        .testTarget(
+            name: "LiveWallpaperTests",
+            dependencies: ["LiveWallpaper"],
+            path: "Tests/LiveWallpaperTests"
         )
     ]
 )

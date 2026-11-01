@@ -17,5 +17,9 @@
     <false/>
     <key>com.apple.security.cs.disable-library-validation</key>
     <false/>
+    
+    <!-- Apple Events: Required for communicating with System Events for screen saver and wallpaper -->
+    <key>com.apple.security.automation.apple-events</key>
+    <true/>
 </dict>
 </plist>

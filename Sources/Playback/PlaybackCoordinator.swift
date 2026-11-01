@@ -9,8 +9,10 @@ public enum PlaylistDirection {
 }
 
 @MainActor
-public final class PlaybackCoordinator: NSObject, ResourceMonitorDelegate, VideoEngineDelegate {
+public final class PlaybackCoordinator: NSObject, ObservableObject, ResourceMonitorDelegate, VideoEngineDelegate {
     public static let shared = PlaybackCoordinator()
+    
+    @Published public private(set) var isPlaying: Bool = false
     
     public let primaryEngine = VideoEngine()
     public private(set) var perDisplayEngines: [CGDirectDisplayID: VideoEngine] = [:]
@@ -188,6 +190,11 @@ public final class PlaybackCoordinator: NSObject, ResourceMonitorDelegate, Video
         // Priority 3: Saved primary bookmark or path
         if let bookmarkData = settings.videoBookmark {
             if let result = SecurityBookmarkManager.shared.resolveBookmark(bookmarkData) {
+                if result.isStale {
+                    if let fresh = SecurityBookmarkManager.shared.createBookmark(for: result.url) {
+                        settings.videoBookmark = fresh
+                    }
+                }
                 loadVideo(url: result.url)
                 return
             }
@@ -197,6 +204,7 @@ public final class PlaybackCoordinator: NSObject, ResourceMonitorDelegate, Video
             let url = URL(fileURLWithPath: path)
             if FileManager.default.fileExists(atPath: url.path) {
                 loadVideo(url: url)
+                return
             }
         }
     }
@@ -230,6 +238,7 @@ public final class PlaybackCoordinator: NSObject, ResourceMonitorDelegate, Video
         for engine in perDisplayEngines.values {
             engine.play()
         }
+        self.isPlaying = true
     }
     
     public func pause() {
@@ -240,6 +249,7 @@ public final class PlaybackCoordinator: NSObject, ResourceMonitorDelegate, Video
         for engine in perDisplayEngines.values {
             engine.pause()
         }
+        self.isPlaying = false
     }
     
     public func loadVideo(url: URL, syncScreenSaver: Bool = true) {
@@ -248,6 +258,10 @@ public final class PlaybackCoordinator: NSObject, ResourceMonitorDelegate, Video
             settings.contentType = .video
         }
         settings.isUserPaused = false
+        
+        if let oldURL = primaryEngine.videoURL, oldURL.standardizedFileURL != url.standardizedFileURL {
+            SecurityBookmarkManager.shared.stopAccessing(url: oldURL)
+        }
         
         if let bookmark = SecurityBookmarkManager.shared.createBookmark(for: url) {
             settings.videoBookmark = bookmark
@@ -319,14 +333,28 @@ public final class PlaybackCoordinator: NSObject, ResourceMonitorDelegate, Video
         }
         
         let targetPath = isNight ? settings.nightVideoPath : settings.dayVideoPath
-        guard let path = targetPath, !path.isEmpty, FileManager.default.fileExists(atPath: path) else {
+        let targetBookmark = isNight ? settings.nightVideoBookmark : settings.dayVideoBookmark
+        
+        var targetURL: URL?
+        if let bookmarkData = targetBookmark,
+           let result = SecurityBookmarkManager.shared.resolveBookmark(bookmarkData) {
+            if result.isStale {
+                if let fresh = SecurityBookmarkManager.shared.createBookmark(for: result.url) {
+                    if isNight { settings.nightVideoBookmark = fresh } else { settings.dayVideoBookmark = fresh }
+                }
+            }
+            targetURL = result.url
+        } else if let path = targetPath, !path.isEmpty, FileManager.default.fileExists(atPath: path) {
+            targetURL = URL(fileURLWithPath: path)
+        }
+        
+        guard let finalURL = targetURL else {
             return false
         }
         
-        let targetURL = URL(fileURLWithPath: path)
-        if primaryEngine.videoURL?.standardizedFileURL != targetURL.standardizedFileURL {
-            NSLog("[PlaybackCoordinator] Day/Night Mode switching to \(isNight ? "Night" : "Day") video: \(path)")
-            loadVideo(url: targetURL)
+        if primaryEngine.videoURL?.standardizedFileURL != finalURL.standardizedFileURL {
+            NSLog("[PlaybackCoordinator] Day/Night Mode switching to \(isNight ? "Night" : "Day") video: \(finalURL.path)")
+            loadVideo(url: finalURL)
             return true
         }
         return false
@@ -381,14 +409,27 @@ public final class PlaybackCoordinator: NSObject, ResourceMonitorDelegate, Video
         guard index >= 0 && index < videos.count else { return false }
         
         let path = videos[index]
-        let url = URL(fileURLWithPath: path)
-        guard FileManager.default.fileExists(atPath: path) else {
-            NSLog("[PlaybackCoordinator] Playlist video file not found: \(path)")
+        var targetURL: URL?
+        
+        if let bookmark = settings.playlistBookmarks[path],
+           let result = SecurityBookmarkManager.shared.resolveBookmark(bookmark) {
+            if result.isStale {
+                if let fresh = SecurityBookmarkManager.shared.createBookmark(for: result.url) {
+                    settings.playlistBookmarks[path] = fresh
+                }
+            }
+            targetURL = result.url
+        } else if FileManager.default.fileExists(atPath: path) {
+            targetURL = URL(fileURLWithPath: path)
+        }
+        
+        guard let finalURL = targetURL else {
+            NSLog("[PlaybackCoordinator] Playlist video file not found or inaccessible: \(path)")
             return false
         }
         
         currentPlaylistIndex = index
-        loadVideo(url: url)
+        loadVideo(url: finalURL)
         return true
     }
     
@@ -468,9 +509,20 @@ public final class PlaybackCoordinator: NSObject, ResourceMonitorDelegate, Video
             let key = String(displayID)
             let targetURL: URL
             if settings.displayMode == .perDisplay,
-               let customPath = settings.perDisplayVideoPaths[key],
-               FileManager.default.fileExists(atPath: customPath) {
-                targetURL = URL(fileURLWithPath: customPath)
+               let customPath = settings.perDisplayVideoPaths[key] {
+                if let bookmark = settings.perDisplayVideoBookmarks[key],
+                   let result = SecurityBookmarkManager.shared.resolveBookmark(bookmark) {
+                    if result.isStale {
+                        if let fresh = SecurityBookmarkManager.shared.createBookmark(for: result.url) {
+                            settings.perDisplayVideoBookmarks[key] = fresh
+                        }
+                    }
+                    targetURL = result.url
+                } else if FileManager.default.fileExists(atPath: customPath) {
+                    targetURL = URL(fileURLWithPath: customPath)
+                } else {
+                    targetURL = url
+                }
             } else {
                 targetURL = url
             }
@@ -576,15 +628,21 @@ public final class PlaybackCoordinator: NSObject, ResourceMonitorDelegate, Video
             if AppSettings.shared.isMouseInteractionEnabled {
                 MouseMotionTracker.shared.start()
             }
-            primaryEngine.play()
-            for engine in perDisplayEngines.values {
-                engine.play()
+            if primaryEngine.videoURL == nil {
+                loadPersistedVideo()
+            } else {
+                primaryEngine.play()
+                for engine in perDisplayEngines.values {
+                    engine.play()
+                }
+                self.isPlaying = true
             }
         } else {
             primaryEngine.pause()
             for engine in perDisplayEngines.values {
                 engine.pause()
             }
+            self.isPlaying = false
             WindowManager.shared.setDisplayLinkActive(false)
             WindowManager.shared.pauseInteractiveLayers()
             MouseMotionTracker.shared.stop()
@@ -664,7 +722,11 @@ public final class PlaybackCoordinator: NSObject, ResourceMonitorDelegate, Video
         }
     }
     
-    public func videoEngineDidChangeState(_ engine: VideoEngine, isPlaying: Bool) {}
+    public func videoEngineDidChangeState(_ engine: VideoEngine, isPlaying: Bool) {
+        if engine === primaryEngine {
+            self.isPlaying = isPlaying
+        }
+    }
     
     public func videoEngineDidEncounterError(_ engine: VideoEngine, error: Error) {
         NSLog("[PlaybackCoordinator] Video error: \(error.localizedDescription)")
@@ -681,5 +743,6 @@ public final class PlaybackCoordinator: NSObject, ResourceMonitorDelegate, Video
             engine.tearDown()
         }
         perDisplayEngines.removeAll()
+        SecurityBookmarkManager.shared.stopAccessingAll()
     }
 }

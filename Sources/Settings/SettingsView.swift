@@ -1014,8 +1014,13 @@ public struct SettingsView: View {
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
-        panel.allowedContentTypes = [.movie, .mpeg4Movie, .quickTimeMovie]
+        var types: [UTType] = [.movie, .video, .mpeg4Movie, .quickTimeMovie]
+        if let m4v = UTType(filenameExtension: "m4v") { types.append(m4v) }
+        if let mp4 = UTType(filenameExtension: "mp4") { types.append(mp4) }
+        panel.allowedContentTypes = types
         panel.prompt = "Select Video"
+        panel.level = .floating
+        panel.center()
         
         NSApp.activate(ignoringOtherApps: true)
         if panel.runModal() == .OK, let url = panel.url {
@@ -1030,6 +1035,8 @@ public struct SettingsView: View {
         panel.allowsMultipleSelection = false
         panel.allowedContentTypes = [.html]
         panel.prompt = "Select HTML File"
+        panel.level = .floating
+        panel.center()
         
         NSApp.activate(ignoringOtherApps: true)
         if panel.runModal() == .OK, let url = panel.url {
@@ -1042,8 +1049,13 @@ public struct SettingsView: View {
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = true
-        panel.allowedContentTypes = [.movie, .mpeg4Movie, .quickTimeMovie]
+        var types: [UTType] = [.movie, .video, .mpeg4Movie, .quickTimeMovie]
+        if let m4v = UTType(filenameExtension: "m4v") { types.append(m4v) }
+        if let mp4 = UTType(filenameExtension: "mp4") { types.append(mp4) }
+        panel.allowedContentTypes = types
         panel.prompt = "Add to Playlist"
+        panel.level = .floating
+        panel.center()
         
         NSApp.activate(ignoringOtherApps: true)
         if panel.runModal() == .OK {
@@ -1057,6 +1069,8 @@ public struct SettingsView: View {
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
         panel.prompt = "Add Folder Videos"
+        panel.level = .floating
+        panel.center()
         
         NSApp.activate(ignoringOtherApps: true)
         if panel.runModal() == .OK, let folderURL = panel.url {
@@ -1077,6 +1091,8 @@ public struct SettingsView: View {
         panel.directoryURL = URL(fileURLWithPath: "/Applications")
         panel.allowedContentTypes = [.application]
         panel.prompt = "Add App"
+        panel.level = .floating
+        panel.center()
         
         NSApp.activate(ignoringOtherApps: true)
         if panel.runModal() == .OK, let url = panel.url {

@@ -43,13 +43,18 @@ public final class VideoEngine: NSObject {
     private var targetFPS: TargetFPS = .fps120
     private var isMuted: Bool = true
     private var hasDisabledAutomaticTermination: Bool = false
+    private var itemStatusObserver: NSKeyValueObservation?
+    private var currentItemObserver: NSKeyValueObservation?
+    private var itemTracksObserver: NSKeyValueObservation?
     
     public override init() {
         self.player = AVQueuePlayer()
         super.init()
         self.player.actionAtItemEnd = .none
         self.player.isMuted = true
+        self.player.volume = 0.0
         self.player.automaticallyWaitsToMinimizeStalling = false
+        setupCurrentItemObserver()
     }
     
     // MARK: - Video Loading
@@ -106,12 +111,8 @@ public final class VideoEngine: NSObject {
         // Direct AVURLAsset binding allows VideoToolbox hardware decoding directly to unified memory
         let playerItem = AVPlayerItem(asset: asset)
         
-        // Zero audio decode overhead: explicitly disable all audio tracks on AVPlayerItem
-        for track in playerItem.tracks {
-            if track.assetTrack?.mediaType == .audio {
-                track.isEnabled = false
-            }
-        }
+        // Zero audio decode overhead: explicitly configure audio tracks on AVPlayerItem
+        applyAudioConfiguration(to: playerItem)
         
         // M3 Pro Unified Memory Optimization:
         // Cap forward buffer to 2.0s to avoid aggressive 300MB+ frame buffer caching while keeping loop seamless.
@@ -226,6 +227,55 @@ public final class VideoEngine: NSObject {
         return mutableComp
     }
     
+    private func setupCurrentItemObserver() {
+        currentItemObserver = player.observe(\.currentItem, options: [.new]) { [weak self] observedPlayer, _ in
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
+                if let activeItem = observedPlayer.currentItem {
+                    self.applyAudioConfiguration(to: activeItem)
+                }
+            }
+        }
+    }
+    
+    private func applyAudioConfiguration(to item: AVPlayerItem) {
+        itemStatusObserver?.invalidate()
+        itemStatusObserver = nil
+        itemTracksObserver?.invalidate()
+        itemTracksObserver = nil
+        
+        let muted = self.isMuted
+        for track in item.tracks {
+            if track.assetTrack?.mediaType == .audio {
+                track.isEnabled = !muted
+            }
+        }
+        
+        itemStatusObserver = item.observe(\.status, options: [.new]) { [weak self] observedItem, _ in
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
+                let isMuted = self.isMuted
+                for track in observedItem.tracks {
+                    if track.assetTrack?.mediaType == .audio {
+                        track.isEnabled = !isMuted
+                    }
+                }
+            }
+        }
+        
+        itemTracksObserver = item.observe(\.tracks, options: [.new]) { [weak self] observedItem, _ in
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
+                let isMuted = self.isMuted
+                for track in observedItem.tracks {
+                    if track.assetTrack?.mediaType == .audio {
+                        track.isEnabled = !isMuted
+                    }
+                }
+            }
+        }
+    }
+    
     // MARK: - Playback Control
     
     public func play() {
@@ -245,6 +295,7 @@ public final class VideoEngine: NSObject {
                 }
                 isPlaying = true
                 updateAutomaticTermination()
+                WindowManager.shared.unfreezeAllFrames()
                 delegate?.videoEngineDidChangeState(self, isPlaying: true)
             }
             return
@@ -320,10 +371,15 @@ public final class VideoEngine: NSObject {
     }
     
     public func setMuted(_ muted: Bool) {
-        guard muted != self.isMuted else { return }
         self.isMuted = muted
         player.isMuted = muted
         player.volume = muted ? 0.0 : 1.0
+        if let item = player.currentItem {
+            applyAudioConfiguration(to: item)
+        }
+        if let template = currentItem, template !== player.currentItem {
+            applyAudioConfiguration(to: template)
+        }
     }
     
     public func updateFramerate(_ fps: TargetFPS) async {
@@ -359,6 +415,12 @@ public final class VideoEngine: NSObject {
             ProcessInfo.processInfo.enableAutomaticTermination("LiveWallpaper Playback")
             hasDisabledAutomaticTermination = false
         }
+        currentItemObserver?.invalidate()
+        currentItemObserver = nil
+        itemStatusObserver?.invalidate()
+        itemStatusObserver = nil
+        itemTracksObserver?.invalidate()
+        itemTracksObserver = nil
         playerLooper?.disableLooping()
         playerLooper = nil
         player.removeAllItems()

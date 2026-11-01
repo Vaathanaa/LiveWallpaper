@@ -11,7 +11,8 @@ public final class VideoPlayerView: NSView {
     private let dimmingOverlayLayer = CALayer()
     private let readabilityGradientLayer = CAGradientLayer()
     private var isFrozen: Bool = false
-    
+    private var displayObserver: NSKeyValueObservation?
+
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         commonInit()
@@ -20,6 +21,11 @@ public final class VideoPlayerView: NSView {
     public required init?(coder: NSCoder) {
         super.init(coder: coder)
         commonInit()
+    }
+    
+    deinit {
+        displayObserver?.invalidate()
+        displayObserver = nil
     }
     
     private func commonInit() {
@@ -100,6 +106,9 @@ public final class VideoPlayerView: NSView {
     }
     
     public func attachPlayer(_ player: AVPlayer) {
+        displayObserver?.invalidate()
+        displayObserver = nil
+        
         if playerLayer.player !== player {
             let transition = CATransition()
             transition.type = .fade
@@ -108,12 +117,35 @@ public final class VideoPlayerView: NSView {
             playerLayer.add(transition, forKey: "playerCrossfade")
             playerLayer.player = player
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
-            self?.unfreezeCurrentFrame()
+        
+        if playerLayer.isReadyForDisplay {
+            unfreezeCurrentFrame()
+        } else {
+            displayObserver = playerLayer.observe(\.isReadyForDisplay, options: [.new]) { [weak self] layer, _ in
+                if layer.isReadyForDisplay {
+                    Task { @MainActor [weak self] in
+                        self?.unfreezeCurrentFrame()
+                        self?.displayObserver?.invalidate()
+                        self?.displayObserver = nil
+                    }
+                }
+            }
+            
+            // Safety fallback timeout in case video has no visual track
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+                guard let self = self else { return }
+                if self.displayObserver != nil {
+                    self.unfreezeCurrentFrame()
+                    self.displayObserver?.invalidate()
+                    self.displayObserver = nil
+                }
+            }
         }
     }
     
     public func detachPlayer(preserveFrame: Bool = true) {
+        displayObserver?.invalidate()
+        displayObserver = nil
         if preserveFrame {
             freezeCurrentFrame()
         }
@@ -131,7 +163,17 @@ public final class VideoPlayerView: NSView {
         generator.requestedTimeToleranceBefore = .zero
         generator.requestedTimeToleranceAfter = .zero
         
-        // Generate thumbnail off the main thread to avoid 50-200ms stall during video swap
+        // Fast synchronous frame grab to guarantee frame is preserved before queue flushes
+        if let syncCGImage = try? generator.copyCGImage(at: time, actualTime: nil) {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            self.playerLayer.contents = syncCGImage
+            CATransaction.commit()
+            WallpaperColorHarmony.shared.extractPalette(from: syncCGImage)
+            return
+        }
+        
+        // Asynchronous thumbnail generation fallback
         Task.detached(priority: .userInitiated) {
             guard let cgImage = try? generator.copyCGImage(at: time, actualTime: nil) else { return }
             await MainActor.run { [weak self] in
@@ -168,11 +210,46 @@ public final class VideoPlayerView: NSView {
     
     public func unfreezeCurrentFrame() {
         guard playerLayer.player?.currentItem != nil else { return }
-        isFrozen = false
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        playerLayer.contents = nil
-        CATransaction.commit()
+        
+        if playerLayer.isReadyForDisplay {
+            displayObserver?.invalidate()
+            displayObserver = nil
+            isFrozen = false
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            playerLayer.contents = nil
+            CATransaction.commit()
+        } else {
+            displayObserver?.invalidate()
+            displayObserver = playerLayer.observe(\.isReadyForDisplay, options: [.new]) { [weak self] layer, _ in
+                if layer.isReadyForDisplay {
+                    Task { @MainActor [weak self] in
+                        guard let self = self else { return }
+                        self.isFrozen = false
+                        CATransaction.begin()
+                        CATransaction.setDisableActions(true)
+                        self.playerLayer.contents = nil
+                        CATransaction.commit()
+                        self.displayObserver?.invalidate()
+                        self.displayObserver = nil
+                    }
+                }
+            }
+            
+            // Safety fallback timeout in case video has no visual track
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+                guard let self = self else { return }
+                if self.displayObserver != nil {
+                    self.isFrozen = false
+                    CATransaction.begin()
+                    CATransaction.setDisableActions(true)
+                    self.playerLayer.contents = nil
+                    CATransaction.commit()
+                    self.displayObserver?.invalidate()
+                    self.displayObserver = nil
+                }
+            }
+        }
     }
     
     public func setVideoGravity(_ gravity: AVLayerVideoGravity) {
