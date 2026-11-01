@@ -49,10 +49,16 @@ mkdir -p "$HOME/Movies/LiveWallpaper"
 if [ -f "$HOME/Library/Application Support/LiveWallpaper/current_wallpaper.mp4" ]; then
   cp "$HOME/Library/Application Support/LiveWallpaper/current_wallpaper.mp4" "$SAVER_BUNDLE/Contents/Resources/current_wallpaper.mp4"
   cp "$HOME/Library/Application Support/LiveWallpaper/current_wallpaper.mp4" "$HOME/Movies/LiveWallpaper/current_wallpaper.mp4"
+  chmod 644 "$SAVER_BUNDLE/Contents/Resources/current_wallpaper.mp4" 2>/dev/null || true
 fi
 if [ -f "$HOME/Library/Application Support/LiveWallpaper/lockscreen_poster.jpg" ]; then
+  cp "$HOME/Library/Application Support/LiveWallpaper/lockscreen_poster.jpg" "$SAVER_BUNDLE/Contents/Resources/lockscreen_poster.jpg"
   cp "$HOME/Library/Application Support/LiveWallpaper/lockscreen_poster.jpg" "$HOME/Movies/LiveWallpaper/lockscreen_poster.jpg"
+  chmod 644 "$SAVER_BUNDLE/Contents/Resources/lockscreen_poster.jpg" 2>/dev/null || true
 fi
+
+# Clean all quarantine attributes so legacyScreenSaver sandbox never rejects the bundle or media
+xattr -cr "$SAVER_BUNDLE" 2>/dev/null || true
 
 codesign --force --deep --sign - --options runtime "$SAVER_BUNDLE"
 rm -rf "$PROJECT_DIR/LiveWallpaper.saver"
@@ -64,5 +70,6 @@ cp -R "$SAVER_BUNDLE" "$LEGACY_BUNDLE"
 
 # Register in macOS currentHost screensaver preferences with explicit integer type
 defaults -currentHost write com.apple.screensaver moduleDict -dict moduleName LiveWallpaper path "$SAVER_BUNDLE" type -int 0
+osascript -e 'tell application "System Events" to set current screen saver to screen saver "LiveWallpaper"' 2>/dev/null || true
 
 echo "==> LiveWallpaper.saver built and registered successfully at $SAVER_BUNDLE"

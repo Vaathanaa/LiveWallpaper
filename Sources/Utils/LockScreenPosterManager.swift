@@ -28,8 +28,15 @@ public final class LockScreenPosterManager {
         }
     }
     
+    public nonisolated static func realHomeDirectory() -> URL {
+        if let pw = getpwuid(getuid()), let dir = pw.pointee.pw_dir {
+            return URL(fileURLWithPath: String(cString: dir), isDirectory: true)
+        }
+        return FileManager.default.homeDirectoryForCurrentUser
+    }
+    
     private nonisolated static func backupIndexPlistOnce() {
-        let home = FileManager.default.homeDirectoryForCurrentUser
+        let home = realHomeDirectory()
         let storeDir = home.appendingPathComponent("Library/Application Support/com.apple.wallpaper/Store", isDirectory: true)
         let indexURL = storeDir.appendingPathComponent("Index.plist")
         let backupURL = storeDir.appendingPathComponent("Index.plist.backup")
@@ -41,19 +48,25 @@ public final class LockScreenPosterManager {
     }
     
     public func updateLockScreenPoster(for asset: AVAsset, at time: CMTime = .zero) {
-        guard let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else { return }
+        let home = Self.realHomeDirectory()
+        let appSupport = home.appendingPathComponent("Library/Application Support", isDirectory: true)
         let liveWallpaperDir = appSupport.appendingPathComponent("LiveWallpaper", isDirectory: true)
         let videoBackdropDir = appSupport.appendingPathComponent("VideoBackdrop", isDirectory: true)
-        let home = FileManager.default.homeDirectoryForCurrentUser
         let moviesDir = home.appendingPathComponent("Movies/LiveWallpaper", isDirectory: true)
+        let saverResourceDir = home.appendingPathComponent("Library/Screen Savers/LiveWallpaper.saver/Contents/Resources", isDirectory: true)
+        let legacySaverResourceDir = home.appendingPathComponent("Library/Screen Savers/VideoBackdrop.saver/Contents/Resources", isDirectory: true)
         
         try? FileManager.default.createDirectory(at: liveWallpaperDir, withIntermediateDirectories: true)
         try? FileManager.default.createDirectory(at: videoBackdropDir, withIntermediateDirectories: true)
         try? FileManager.default.createDirectory(at: moviesDir, withIntermediateDirectories: true)
+        try? FileManager.default.createDirectory(at: saverResourceDir, withIntermediateDirectories: true)
+        try? FileManager.default.createDirectory(at: legacySaverResourceDir, withIntermediateDirectories: true)
         
         let stableURL = liveWallpaperDir.appendingPathComponent("lockscreen_poster.jpg")
         let backupStableURL = videoBackdropDir.appendingPathComponent("lockscreen_poster.jpg")
         let moviesPosterURL = moviesDir.appendingPathComponent("lockscreen_poster.jpg")
+        let saverPosterURL = saverResourceDir.appendingPathComponent("lockscreen_poster.jpg")
+        let legacySaverPosterURL = legacySaverResourceDir.appendingPathComponent("lockscreen_poster.jpg")
         
         Task.detached(priority: .userInitiated) {
             let gen = AVAssetImageGenerator(asset: asset)
@@ -73,11 +86,21 @@ public final class LockScreenPosterManager {
                 let (cgImage, _) = try await gen.image(at: targetTime)
                 let rep = NSBitmapImageRep(cgImage: cgImage)
                 
-                // 1. Write high-quality JPEG poster for Application Support & Movies
+                // 1. Write high-quality JPEG poster for Application Support, Movies, and Screen Saver bundles
                 if let jpegData = rep.representation(using: .jpeg, properties: [.compressionFactor: 0.95]) {
                     try? jpegData.write(to: stableURL, options: .atomic)
                     try? jpegData.write(to: backupStableURL, options: .atomic)
                     try? jpegData.write(to: moviesPosterURL, options: .atomic)
+                    try? jpegData.write(to: saverPosterURL, options: .atomic)
+                    try? jpegData.write(to: legacySaverPosterURL, options: .atomic)
+                    
+                    for url in [stableURL, backupStableURL, moviesPosterURL, saverPosterURL, legacySaverPosterURL] {
+                        try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: url.path)
+                        let xattrTask = Process()
+                        xattrTask.executableURL = URL(fileURLWithPath: "/usr/bin/xattr")
+                        xattrTask.arguments = ["-c", url.path]
+                        try? xattrTask.run()
+                    }
                 }
                 
                 // 2. CRITICAL for macOS Lock Screen: Write directly to /Library/Caches/Desktop Pictures/<user-uuid>/lockscreen.png
@@ -90,6 +113,11 @@ public final class LockScreenPosterManager {
                             if FileManager.default.fileExists(atPath: userDir, isDirectory: &isDir), isDir.boolValue {
                                 let lockscreenPNG = (userDir as NSString).appendingPathComponent("lockscreen.png")
                                 try? pngData.write(to: URL(fileURLWithPath: lockscreenPNG), options: .atomic)
+                                try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: lockscreenPNG)
+                                let xattrTask = Process()
+                                xattrTask.executableURL = URL(fileURLWithPath: "/usr/bin/xattr")
+                                xattrTask.arguments = ["-c", lockscreenPNG]
+                                try? xattrTask.run()
                                 AppLogger.poster.info("Successfully updated system lockscreen.png at: \(lockscreenPNG, privacy: .private(mask: .hash))")
                             }
                         }
@@ -117,7 +145,13 @@ public final class LockScreenPosterManager {
                 // 4. Update Index.plist for Desktop choices with individual space/display mode
                 Self.updateIndexPlistForDesktop(stableURL: stableURL)
                 
-                // 5. Asynchronously notify System Events on background utility queue
+                // 5. Signal WallpaperAgent to refresh Desktop and Lock Screen immediately
+                let reloadTask = Process()
+                reloadTask.executableURL = URL(fileURLWithPath: "/usr/bin/killall")
+                reloadTask.arguments = ["WallpaperAgent"]
+                try? reloadTask.run()
+                
+                // 6. Asynchronously notify System Events on background utility queue
                 DispatchQueue.global(qos: .utility).async {
                     let pathString = stableURL.path.replacingOccurrences(of: "\"", with: "\\\"")
                     let script = """
@@ -141,14 +175,14 @@ public final class LockScreenPosterManager {
     
     /// Synchronizes the active video directly to macOS's native 120Hz Screen Saver and caches
     public func syncScreenSaverVideo(from sourceURL: URL, asset: AVAsset) {
-        guard let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else { return }
+        let home = Self.realHomeDirectory()
+        let appSupport = home.appendingPathComponent("Library/Application Support", isDirectory: true)
         let liveWallpaperDir = appSupport.appendingPathComponent("LiveWallpaper", isDirectory: true)
         let videoBackdropDir = appSupport.appendingPathComponent("VideoBackdrop", isDirectory: true)
         
         let localVideo1 = liveWallpaperDir.appendingPathComponent("current_wallpaper.mp4")
         let localVideo2 = videoBackdropDir.appendingPathComponent("current_wallpaper.mp4")
         
-        let home = FileManager.default.homeDirectoryForCurrentUser
         let moviesDir = home.appendingPathComponent("Movies/LiveWallpaper", isDirectory: true)
         let moviesVideo = moviesDir.appendingPathComponent("current_wallpaper.mp4")
         
@@ -176,7 +210,7 @@ public final class LockScreenPosterManager {
                 try FileManager.default.createDirectory(at: aerialVideosDir, withIntermediateDirectories: true)
                 try FileManager.default.createDirectory(at: aerialThumbDir, withIntermediateDirectories: true)
                 
-                // Helper to avoid redundant multi-megabyte writes on startup
+                // Helper to avoid redundant multi-megabyte writes on startup, while guaranteeing clean permissions & no quarantine
                 func syncFileIfNeeded(from src: URL, to dst: URL, backupOriginal: Bool = false) {
                     if backupOriginal && FileManager.default.fileExists(atPath: dst.path) {
                         let backupURL = dst.appendingPathExtension("original")
@@ -190,11 +224,22 @@ public final class LockScreenPosterManager {
                            let srcSize = srcAttrs[.size] as? Int64,
                            let dstSize = dstAttrs[.size] as? Int64,
                            srcSize == dstSize {
+                            // Ensure permissions and strip quarantine even if identical
+                            try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: dst.path)
+                            let xattrTask = Process()
+                            xattrTask.executableURL = URL(fileURLWithPath: "/usr/bin/xattr")
+                            xattrTask.arguments = ["-c", dst.path]
+                            try? xattrTask.run()
                             return // Identical file already exists, zero I/O hitches!
                         }
                         try? FileManager.default.removeItem(at: dst)
                     }
                     try? FileManager.default.copyItem(at: src, to: dst)
+                    try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: dst.path)
+                    let xattrTask = Process()
+                    xattrTask.executableURL = URL(fileURLWithPath: "/usr/bin/xattr")
+                    xattrTask.arguments = ["-c", dst.path]
+                    try? xattrTask.run()
                 }
                 
                 syncFileIfNeeded(from: sourceURL, to: localVideo1)
@@ -209,6 +254,23 @@ public final class LockScreenPosterManager {
                 try? FileManager.default.createDirectory(at: legacyResourceVideo.deletingLastPathComponent(), withIntermediateDirectories: true)
                 syncFileIfNeeded(from: sourceURL, to: saverResourceVideo)
                 syncFileIfNeeded(from: sourceURL, to: legacyResourceVideo)
+                
+                // Also copy lockscreen poster to saver resources if available
+                let stablePoster = liveWallpaperDir.appendingPathComponent("lockscreen_poster.jpg")
+                if FileManager.default.fileExists(atPath: stablePoster.path) {
+                    let saverPoster = home.appendingPathComponent("Library/Screen Savers/LiveWallpaper.saver/Contents/Resources/lockscreen_poster.jpg")
+                    let legacyPoster = home.appendingPathComponent("Library/Screen Savers/VideoBackdrop.saver/Contents/Resources/lockscreen_poster.jpg")
+                    syncFileIfNeeded(from: stablePoster, to: saverPoster)
+                    syncFileIfNeeded(from: stablePoster, to: legacyPoster)
+                }
+                
+                // Re-sign saver bundle ad-hoc to guarantee Gatekeeper validation
+                let saverPath = "\(home.path)/Library/Screen Savers/LiveWallpaper.saver"
+                let codesignTask = Process()
+                codesignTask.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
+                codesignTask.arguments = ["--force", "--deep", "--sign", "-", saverPath]
+                try? codesignTask.run()
+                codesignTask.waitUntilExit()
                 
                 // Sync all native macOS aerial slots so WallpaperAgent ALWAYS plays the live video
                 for aerialID in officialAerialIDs {
@@ -238,6 +300,7 @@ public final class LockScreenPosterManager {
                             let thumbURL = aerialThumbDir.appendingPathComponent("\(aerialID).png")
                             if !FileManager.default.fileExists(atPath: thumbURL.path) {
                                 try? pngData.write(to: thumbURL, options: .atomic)
+                                try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: thumbURL.path)
                             }
                         }
                     }
@@ -247,11 +310,11 @@ public final class LockScreenPosterManager {
                 Self.ensureNativeAerialScreenSaverConfigured()
                 
                 // Configure com.apple.screensaver defaults to LiveWallpaper.saver with proper integer type 0
-                let saverPath = "\(home.path)/Library/Screen Savers/LiveWallpaper.saver"
                 let task = Process()
                 task.executableURL = URL(fileURLWithPath: "/usr/bin/defaults")
                 task.arguments = ["-currentHost", "write", "com.apple.screensaver", "moduleDict", "-dict", "moduleName", "LiveWallpaper", "path", saverPath, "type", "-int", "0"]
                 try? task.run()
+                task.waitUntilExit()
                 
                 // Ensure System Events has LiveWallpaper set as the current active screen saver
                 let tellSystemEvents = """
@@ -271,6 +334,12 @@ public final class LockScreenPosterManager {
                     try? FileManager.default.copyItem(atPath: saverPath, toPath: legacySaver)
                 }
                 
+                // Signal WallpaperAgent to refresh screen saver aerials
+                let killTask = Process()
+                killTask.executableURL = URL(fileURLWithPath: "/usr/bin/killall")
+                killTask.arguments = ["WallpaperAgent"]
+                try? killTask.run()
+                
                 AppLogger.poster.info("Synchronized video to native Aerials and LiveWallpaper.saver!")
             } catch {
                 AppLogger.poster.warning("Warning syncing screensaver video: \(error.localizedDescription, privacy: .public)")
@@ -279,7 +348,7 @@ public final class LockScreenPosterManager {
     }
     
     private nonisolated static func updateIndexPlistForDesktop(stableURL: URL) {
-        let home = FileManager.default.homeDirectoryForCurrentUser
+        let home = realHomeDirectory()
         let indexURL = home.appendingPathComponent("Library/Application Support/com.apple.wallpaper/Store/Index.plist")
         guard FileManager.default.fileExists(atPath: indexURL.path),
               let data = try? Data(contentsOf: indexURL),
@@ -287,9 +356,10 @@ public final class LockScreenPosterManager {
             return
         }
         
+        let fileURLString = stableURL.standardizedFileURL.absoluteString
         let configDict: [String: Any] = [
             "type": "imageFile",
-            "url": ["relative": "file://\(stableURL.path)"]
+            "url": ["relative": fileURLString]
         ]
         guard let configData = try? PropertyListSerialization.data(fromPropertyList: configDict, format: .binary, options: 0) else {
             return
@@ -351,6 +421,7 @@ public final class LockScreenPosterManager {
                     space["Displays"] = dispMap
                 }
                 spaces[k] = space
+                modified = true
             }
             plist["Spaces"] = spaces
         }
@@ -361,7 +432,7 @@ public final class LockScreenPosterManager {
     }
     
     public nonisolated static func ensureNativeAerialScreenSaverConfigured() {
-        let home = FileManager.default.homeDirectoryForCurrentUser
+        let home = realHomeDirectory()
         let indexURL = home.appendingPathComponent("Library/Application Support/com.apple.wallpaper/Store/Index.plist")
         guard FileManager.default.fileExists(atPath: indexURL.path),
               let data = try? Data(contentsOf: indexURL),
@@ -462,7 +533,7 @@ public final class LockScreenPosterManager {
     public func restoreOriginalWallpapers() {
         AppLogger.poster.info("Restoring macOS default wallpaper and lock screen...")
         let defaultWallpaperURL = URL(fileURLWithPath: "/System/Library/CoreServices/DefaultDesktop.heic")
-        let home = FileManager.default.homeDirectoryForCurrentUser
+        let home = Self.realHomeDirectory()
         
         // 1. Reset each screen to original wallpaper or macOS DefaultDesktop.heic
         for screen in NSScreen.screens {
@@ -550,7 +621,7 @@ public final class LockScreenPosterManager {
     }
     
     public nonisolated static func restoreIndexPlistIdleToDefault() {
-        let home = FileManager.default.homeDirectoryForCurrentUser
+        let home = realHomeDirectory()
         let indexURL = home.appendingPathComponent("Library/Application Support/com.apple.wallpaper/Store/Index.plist")
         guard FileManager.default.fileExists(atPath: indexURL.path),
               let data = try? Data(contentsOf: indexURL),

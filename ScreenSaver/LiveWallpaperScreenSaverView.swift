@@ -58,14 +58,16 @@ public class LiveWallpaperScreenSaverView: ScreenSaverView {
         
         guard let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else { return }
         let home = FileManager.default.homeDirectoryForCurrentUser
+        let saverBundle = Bundle(for: LiveWallpaperScreenSaverView.self)
         
         let candidatePosters: [URL] = [
+            saverBundle.url(forResource: "lockscreen_poster", withExtension: "jpg"),
             home.appendingPathComponent("Movies/LiveWallpaper/lockscreen_poster.jpg"),
             home.appendingPathComponent("Library/Containers/com.apple.ScreenSaver.Engine.legacyScreenSaver/Data/Library/Application Support/LiveWallpaper/lockscreen_poster.jpg"),
             appSupport.appendingPathComponent("LiveWallpaper/lockscreen_poster.jpg"),
             appSupport.appendingPathComponent("VideoBackdrop/lockscreen_poster.jpg"),
             home.appendingPathComponent("Library/Application Support/com.apple.wallpaper/aerials/thumbnails/FF9CB826-41B2-4A5E-A0AA-D4842AA26511.png")
-        ]
+        ].compactMap { $0 }
         
         // 1. Instant fallback image: guarantees ZERO black frames
         for posterURL in candidatePosters {
@@ -81,7 +83,7 @@ public class LiveWallpaperScreenSaverView: ScreenSaverView {
         
         // 2. Discover video source across sandbox boundaries
         let candidateVideos: [URL] = [
-            Bundle(for: LiveWallpaperScreenSaverView.self).url(forResource: "current_wallpaper", withExtension: "mp4"),
+            saverBundle.url(forResource: "current_wallpaper", withExtension: "mp4"),
             home.appendingPathComponent("Movies/LiveWallpaper/current_wallpaper.mp4"),
             home.appendingPathComponent("Library/Containers/com.apple.ScreenSaver.Engine.legacyScreenSaver/Data/Library/Application Support/LiveWallpaper/current_wallpaper.mp4"),
             appSupport.appendingPathComponent("LiveWallpaper/current_wallpaper.mp4"),
@@ -93,7 +95,8 @@ public class LiveWallpaperScreenSaverView: ScreenSaverView {
         
         var targetURL: URL?
         for candidate in candidateVideos {
-            if FileManager.default.fileExists(atPath: candidate.path) {
+            if FileManager.default.fileExists(atPath: candidate.path) &&
+               FileManager.default.isReadableFile(atPath: candidate.path) {
                 targetURL = candidate
                 break
             }
