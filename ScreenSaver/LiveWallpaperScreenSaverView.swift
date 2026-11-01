@@ -56,7 +56,7 @@ public class LiveWallpaperScreenSaverView: ScreenSaverView {
         guard let layer = self.layer else { return }
         layer.backgroundColor = NSColor.black.cgColor
         
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        guard let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else { return }
         let home = FileManager.default.homeDirectoryForCurrentUser
         
         let candidatePosters: [URL] = [
@@ -119,6 +119,7 @@ public class LiveWallpaperScreenSaverView: ScreenSaverView {
         queuePlayer.isMuted = true
         queuePlayer.actionAtItemEnd = .none
         queuePlayer.automaticallyWaitsToMinimizeStalling = false
+        queuePlayer.preventsDisplaySleepDuringVideoPlayback = false
         
         self.playerLooper = AVPlayerLooper(player: queuePlayer, templateItem: item)
         self.player = queuePlayer
@@ -127,6 +128,7 @@ public class LiveWallpaperScreenSaverView: ScreenSaverView {
         pLayer.frame = bounds
         pLayer.autoresizingMask = [.layerWidthSizable, .layerHeightSizable]
         pLayer.videoGravity = .resizeAspectFill
+        pLayer.drawsAsynchronously = true
         layer.addSublayer(pLayer)
         self.playerLayer = pLayer
         self.isConfigured = true
@@ -170,5 +172,15 @@ public class LiveWallpaperScreenSaverView: ScreenSaverView {
     
     public override var hasConfigureSheet: Bool {
         return false
+    }
+    
+    deinit {
+        playerLooper?.disableLooping()
+        playerLooper = nil
+        player?.pause()
+        player?.removeAllItems()
+        player = nil
+        playerLayer?.removeFromSuperlayer()
+        playerLayer = nil
     }
 }

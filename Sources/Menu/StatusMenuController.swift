@@ -12,7 +12,7 @@ public final class StatusMenuController: NSObject, NSMenuDelegate {
     public weak var delegate: StatusMenuControllerDelegate?
     public static var isMenuOpen: Bool = false
     
-    private var statusItem: NSStatusItem!
+    private var statusItem: NSStatusItem?
     private let menu = NSMenu()
     
     private let miniPlayerItem = NSMenuItem()
@@ -56,8 +56,8 @@ public final class StatusMenuController: NSObject, NSMenuDelegate {
     }
     
     private func setupStatusItem() {
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        if let button = statusItem.button {
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        if let button = item.button {
             let symbolConfig = NSImage.SymbolConfiguration(pointSize: 14, weight: .medium)
             if let image = NSImage(systemSymbolName: "play.desktopcomputer", accessibilityDescription: "LiveWallpaper")?
                 .withSymbolConfiguration(symbolConfig) {
@@ -67,8 +67,9 @@ public final class StatusMenuController: NSObject, NSMenuDelegate {
             button.imagePosition = .imageOnly
             button.toolTip = "LiveWallpaper — Ultra-Smooth Live Desktop"
         }
-        statusItem.menu = menu
+        item.menu = menu
         menu.delegate = self
+        self.statusItem = item
     }
     
     private func buildMenu() {
@@ -494,9 +495,11 @@ public final class StatusMenuController: NSObject, NSMenuDelegate {
             NSApp.activate(ignoringOtherApps: true)
             
             if panel.runModal() == .OK, let url = panel.url {
-                PlaybackCoordinator.shared.setVideoForDisplay(url: url, displayID: displayID)
-                self?.buildDisplayModeSubmenu()
-                self?.updateMenuState()
+                if case .success(let validURL) = FileValidator.validateVideoURL(url) {
+                    PlaybackCoordinator.shared.setVideoForDisplay(url: validURL, displayID: displayID)
+                    self?.buildDisplayModeSubmenu()
+                    self?.updateMenuState()
+                }
             }
         }
     }
@@ -531,9 +534,11 @@ public final class StatusMenuController: NSObject, NSMenuDelegate {
             NSApp.activate(ignoringOtherApps: true)
             
             if panel.runModal() == .OK, let url = panel.url {
-                AppSettings.shared.contentType = .video
-                PlaybackCoordinator.shared.loadVideo(url: url)
-                self?.updateMenuState()
+                if case .success(let validURL) = FileValidator.validateVideoURL(url) {
+                    AppSettings.shared.contentType = .video
+                    PlaybackCoordinator.shared.loadVideo(url: validURL)
+                    self?.updateMenuState()
+                }
             }
         }
     }

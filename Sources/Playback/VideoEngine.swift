@@ -43,9 +43,9 @@ public final class VideoEngine: NSObject {
     private var targetFPS: TargetFPS = .fps120
     private var isMuted: Bool = true
     private var hasDisabledAutomaticTermination: Bool = false
-    private var itemStatusObserver: NSKeyValueObservation?
+    private var itemStatusObservers: [ObjectIdentifier: NSKeyValueObservation] = [:]
     private var currentItemObserver: NSKeyValueObservation?
-    private var itemTracksObserver: NSKeyValueObservation?
+    private var itemTracksObservers: [ObjectIdentifier: NSKeyValueObservation] = [:]
     
     public override init() {
         self.player = AVQueuePlayer()
@@ -53,6 +53,7 @@ public final class VideoEngine: NSObject {
         self.player.actionAtItemEnd = .none
         self.player.isMuted = true
         self.player.volume = 0.0
+        self.player.preventsDisplaySleepDuringVideoPlayback = false
         self.player.automaticallyWaitsToMinimizeStalling = false
         setupCurrentItemObserver()
     }
@@ -60,6 +61,9 @@ public final class VideoEngine: NSObject {
     // MARK: - Video Loading
     
     public func loadVideo(url: URL, targetFPS: TargetFPS, isMuted: Bool, playbackSpeed: Double = 1.0) async {
+        if let old = self.videoURL, old.standardizedFileURL != url.standardizedFileURL {
+            SecurityBookmarkManager.shared.stopAccessing(url: old)
+        }
         self.videoURL = url
         self.targetFPS = targetFPS
         self.isMuted = isMuted
@@ -106,6 +110,10 @@ public final class VideoEngine: NSObject {
                 self.videoDurationSeconds = durSec
             }
         }
+        
+        // Ensure audio and video tracks are fully loaded before creating AVPlayerItem
+        _ = try? await asset.loadTracks(withMediaType: .audio)
+        _ = try? await asset.loadTracks(withMediaType: .video)
         
         // Zero-copy direct hardware fast path:
         // Direct AVURLAsset binding allows VideoToolbox hardware decoding directly to unified memory
@@ -219,10 +227,10 @@ public final class VideoEngine: NSObject {
     private func makeFramerateComposition(for asset: AVAsset, fps: Int) async -> AVVideoComposition? {
         guard fps > 0 else { return nil }
         let frameDuration = CMTime(value: 1, timescale: CMTimeScale(fps))
-        guard let baseComp = try? await AVVideoComposition.videoComposition(withPropertiesOf: asset) else {
+        guard let baseComp = try? await AVVideoComposition.videoComposition(withPropertiesOf: asset),
+              let mutableComp = baseComp.mutableCopy() as? AVMutableVideoComposition else {
             return nil
         }
-        let mutableComp = baseComp.mutableCopy() as! AVMutableVideoComposition
         mutableComp.frameDuration = frameDuration
         return mutableComp
     }
@@ -231,6 +239,9 @@ public final class VideoEngine: NSObject {
         currentItemObserver = player.observe(\.currentItem, options: [.new]) { [weak self] observedPlayer, _ in
             Task { @MainActor [weak self] in
                 guard let self = self else { return }
+                for item in observedPlayer.items() {
+                    self.applyAudioConfiguration(to: item)
+                }
                 if let activeItem = observedPlayer.currentItem {
                     self.applyAudioConfiguration(to: activeItem)
                 }
@@ -239,37 +250,36 @@ public final class VideoEngine: NSObject {
     }
     
     private func applyAudioConfiguration(to item: AVPlayerItem) {
-        itemStatusObserver?.invalidate()
-        itemStatusObserver = nil
-        itemTracksObserver?.invalidate()
-        itemTracksObserver = nil
-        
-        let muted = self.isMuted
+        let isMuted = self.isMuted
         for track in item.tracks {
             if track.assetTrack?.mediaType == .audio {
-                track.isEnabled = !muted
+                track.isEnabled = !isMuted
             }
         }
         
-        itemStatusObserver = item.observe(\.status, options: [.new]) { [weak self] observedItem, _ in
+        let id = ObjectIdentifier(item)
+        itemStatusObservers[id]?.invalidate()
+        itemTracksObservers[id]?.invalidate()
+        
+        itemStatusObservers[id] = item.observe(\.status, options: [.new]) { [weak self] observedItem, _ in
             Task { @MainActor [weak self] in
                 guard let self = self else { return }
-                let isMuted = self.isMuted
+                let muted = self.isMuted
                 for track in observedItem.tracks {
                     if track.assetTrack?.mediaType == .audio {
-                        track.isEnabled = !isMuted
+                        track.isEnabled = !muted
                     }
                 }
             }
         }
         
-        itemTracksObserver = item.observe(\.tracks, options: [.new]) { [weak self] observedItem, _ in
+        itemTracksObservers[id] = item.observe(\.tracks, options: [.new]) { [weak self] observedItem, _ in
             Task { @MainActor [weak self] in
                 guard let self = self else { return }
-                let isMuted = self.isMuted
+                let muted = self.isMuted
                 for track in observedItem.tracks {
                     if track.assetTrack?.mediaType == .audio {
-                        track.isEnabled = !isMuted
+                        track.isEnabled = !muted
                     }
                 }
             }
@@ -367,17 +377,17 @@ public final class VideoEngine: NSObject {
         currentAsset = nil
         
         isBufferReleased = true
-        NSLog("[VideoEngine] Hardware decode buffers released. Frame snapshot preserved.")
+        AppLogger.video.info("Hardware decode buffers released. Frame snapshot preserved.")
     }
     
     public func setMuted(_ muted: Bool) {
         self.isMuted = muted
         player.isMuted = muted
         player.volume = muted ? 0.0 : 1.0
-        if let item = player.currentItem {
+        for item in player.items() {
             applyAudioConfiguration(to: item)
         }
-        if let template = currentItem, template !== player.currentItem {
+        if let template = currentItem {
             applyAudioConfiguration(to: template)
         }
     }
@@ -417,14 +427,26 @@ public final class VideoEngine: NSObject {
         }
         currentItemObserver?.invalidate()
         currentItemObserver = nil
-        itemStatusObserver?.invalidate()
-        itemStatusObserver = nil
-        itemTracksObserver?.invalidate()
-        itemTracksObserver = nil
+        for (_, obs) in itemStatusObservers {
+            obs.invalidate()
+        }
+        itemStatusObservers.removeAll()
+        for (_, obs) in itemTracksObservers {
+            obs.invalidate()
+        }
+        itemTracksObservers.removeAll()
         playerLooper?.disableLooping()
         playerLooper = nil
         player.removeAllItems()
         currentItem = nil
         currentAsset = nil
+        if let url = self.videoURL {
+            SecurityBookmarkManager.shared.stopAccessing(url: url)
+            self.videoURL = nil
+        }
+    }
+    
+    isolated deinit {
+        tearDown()
     }
 }

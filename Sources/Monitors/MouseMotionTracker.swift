@@ -182,4 +182,9 @@ public final class MouseMotionTracker: NSObject, ObservableObject {
             sleepDisplayLink()
         }
     }
+    
+    isolated deinit {
+        NotificationCenter.default.removeObserver(self)
+        stop()
+    }
 }

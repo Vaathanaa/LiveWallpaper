@@ -68,7 +68,7 @@ public final class SystemDiagnostics: ObservableObject {
         var info = mach_task_basic_info()
         var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info>.size / 4)
         let kerr = withUnsafeMutablePointer(to: &info) {
-            $0.withMemoryRebound(to: integer_t.self, capacity: 1) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
                 task_info(mach_task_self_, task_flavor_t(MACH_TASK_BASIC_INFO), $0, &count)
             }
         }
@@ -90,7 +90,7 @@ public final class SystemDiagnostics: ObservableObject {
             var threadInfo = thread_basic_info()
             var count = mach_msg_type_number_t(THREAD_INFO_MAX)
             let threadKerr = withUnsafeMutablePointer(to: &threadInfo) {
-                $0.withMemoryRebound(to: integer_t.self, capacity: 1) {
+                $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
                     Darwin.thread_info(thread, thread_flavor_t(THREAD_BASIC_INFO), $0, &count)
                 }
             }

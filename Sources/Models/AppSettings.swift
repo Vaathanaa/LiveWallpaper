@@ -539,13 +539,13 @@ public final class AppSettings: ObservableObject {
                     }
                 } else {
                     if SMAppService.mainApp.status == .enabled {
-                        try await SMAppService.mainApp.unregister()
+                        try SMAppService.mainApp.unregister()
                     }
                 }
                 let currentStatus = SMAppService.mainApp.status == .enabled
                 self.isLaunchAtLoginEnabled = currentStatus
             } catch {
-                NSLog("[AppSettings] Error toggling launch at login: \(error.localizedDescription)")
+                AppLogger.general.error("Error toggling launch at login: \(error.localizedDescription, privacy: .public)")
             }
         }
     }

@@ -230,7 +230,7 @@ public final class PlaybackCoordinator: NSObject, ObservableObject, ResourceMoni
         }
         
         guard resourceMonitor.activePauseReasons.isEmpty else {
-            NSLog("[PlaybackCoordinator] Cannot play: active pause reasons: \(resourceMonitor.activePauseReasons)")
+            AppLogger.playback.info("Cannot play: active pause reasons: \(self.resourceMonitor.activePauseReasons.description, privacy: .public)")
             return
         }
         
@@ -253,31 +253,37 @@ public final class PlaybackCoordinator: NSObject, ObservableObject, ResourceMoni
     }
     
     public func loadVideo(url: URL, syncScreenSaver: Bool = true) {
+        guard case .success(let validatedURL) = FileValidator.validateVideoURL(url) else {
+            AppLogger.playback.error("loadVideo rejected invalid URL: \(url.path, privacy: .private(mask: .hash))")
+            SecurityBookmarkManager.shared.stopAccessing(url: url)
+            return
+        }
+        
         let settings = AppSettings.shared
         if settings.contentType != .video {
             settings.contentType = .video
         }
         settings.isUserPaused = false
         
-        if let oldURL = primaryEngine.videoURL, oldURL.standardizedFileURL != url.standardizedFileURL {
-            SecurityBookmarkManager.shared.stopAccessing(url: oldURL)
+        settings.videoPath = validatedURL.path
+        Task.detached(priority: .utility) {
+            if let bookmark = SecurityBookmarkManager.shared.createBookmark(for: validatedURL) {
+                await MainActor.run {
+                    settings.videoBookmark = bookmark
+                }
+            }
         }
-        
-        if let bookmark = SecurityBookmarkManager.shared.createBookmark(for: url) {
-            settings.videoBookmark = bookmark
-        }
-        settings.videoPath = url.path
         
         Task { @MainActor in
             await primaryEngine.loadVideo(
-                url: url,
+                url: validatedURL,
                 targetFPS: settings.targetFPS,
                 isMuted: settings.isMuted,
                 playbackSpeed: settings.playbackSpeed
             )
             
             // Rebuild/update secondary engines so all monitors receive a dedicated hardware stream
-            await updateSecondaryEngines(url: url)
+            await updateSecondaryEngines(url: validatedURL)
             
             resourceMonitor.evaluateAllConditions()
             
@@ -291,10 +297,10 @@ public final class PlaybackCoordinator: NSObject, ObservableObject, ResourceMoni
             if syncScreenSaver {
                 Task.detached(priority: .background) {
                     try? await Task.sleep(nanoseconds: 2_500_000_000)
-                    let asset = AVURLAsset(url: url)
+                    let asset = AVURLAsset(url: validatedURL)
                     await MainActor.run {
                         LockScreenPosterManager.shared.updateLockScreenPoster(for: asset, at: .zero)
-                        LockScreenPosterManager.shared.syncScreenSaverVideo(from: url, asset: asset)
+                        LockScreenPosterManager.shared.syncScreenSaverVideo(from: validatedURL, asset: asset)
                     }
                 }
             }
@@ -336,6 +342,7 @@ public final class PlaybackCoordinator: NSObject, ObservableObject, ResourceMoni
         let targetBookmark = isNight ? settings.nightVideoBookmark : settings.dayVideoBookmark
         
         var targetURL: URL?
+        var resolvedBookmarkURL: URL?
         if let bookmarkData = targetBookmark,
            let result = SecurityBookmarkManager.shared.resolveBookmark(bookmarkData) {
             if result.isStale {
@@ -344,20 +351,28 @@ public final class PlaybackCoordinator: NSObject, ObservableObject, ResourceMoni
                 }
             }
             targetURL = result.url
+            resolvedBookmarkURL = result.url
         } else if let path = targetPath, !path.isEmpty, FileManager.default.fileExists(atPath: path) {
             targetURL = URL(fileURLWithPath: path)
         }
         
         guard let finalURL = targetURL else {
+            if let resolved = resolvedBookmarkURL {
+                SecurityBookmarkManager.shared.stopAccessing(url: resolved)
+            }
             return false
         }
         
         if primaryEngine.videoURL?.standardizedFileURL != finalURL.standardizedFileURL {
-            NSLog("[PlaybackCoordinator] Day/Night Mode switching to \(isNight ? "Night" : "Day") video: \(finalURL.path)")
+            AppLogger.playback.info("Day/Night Mode switching to \(isNight ? "Night" : "Day", privacy: .public) video: \(finalURL.path, privacy: .private(mask: .hash))")
             loadVideo(url: finalURL)
             return true
+        } else {
+            if let resolved = resolvedBookmarkURL {
+                SecurityBookmarkManager.shared.stopAccessing(url: resolved)
+            }
+            return false
         }
-        return false
     }
     
     // MARK: - Feature 2: Multi-Video Playlist Engine
@@ -410,6 +425,7 @@ public final class PlaybackCoordinator: NSObject, ObservableObject, ResourceMoni
         
         let path = videos[index]
         var targetURL: URL?
+        var resolvedBookmarkURL: URL?
         
         if let bookmark = settings.playlistBookmarks[path],
            let result = SecurityBookmarkManager.shared.resolveBookmark(bookmark) {
@@ -419,12 +435,16 @@ public final class PlaybackCoordinator: NSObject, ObservableObject, ResourceMoni
                 }
             }
             targetURL = result.url
+            resolvedBookmarkURL = result.url
         } else if FileManager.default.fileExists(atPath: path) {
             targetURL = URL(fileURLWithPath: path)
         }
         
         guard let finalURL = targetURL else {
-            NSLog("[PlaybackCoordinator] Playlist video file not found or inaccessible: \(path)")
+            AppLogger.playback.warning("Playlist video file not found or inaccessible: \(path, privacy: .private(mask: .hash))")
+            if let resolved = resolvedBookmarkURL {
+                SecurityBookmarkManager.shared.stopAccessing(url: resolved)
+            }
             return false
         }
         
@@ -438,7 +458,10 @@ public final class PlaybackCoordinator: NSObject, ObservableObject, ResourceMoni
         var currentList = settings.playlistVideos
         var bookmarks = settings.playlistBookmarks
         
-        for url in urls {
+        for rawURL in urls {
+            guard case .success(let url) = FileValidator.validateVideoURL(rawURL) else {
+                continue
+            }
             let path = url.path
             if !currentList.contains(path) {
                 currentList.append(path)
@@ -485,10 +508,10 @@ public final class PlaybackCoordinator: NSObject, ObservableObject, ResourceMoni
         let primaryID = self.primaryDisplayID
         
         // Remove detached display engines or engine if assigned to primary
-        for (displayID, engine) in perDisplayEngines {
-            if !currentDisplayIDs.contains(displayID) || displayID == primaryID {
+        let removedIDs = perDisplayEngines.keys.filter { !currentDisplayIDs.contains($0) || $0 == primaryID }
+        for displayID in removedIDs {
+            if let engine = perDisplayEngines.removeValue(forKey: displayID) {
                 engine.tearDown()
-                perDisplayEngines.removeValue(forKey: displayID)
             }
         }
         
@@ -496,7 +519,7 @@ public final class PlaybackCoordinator: NSObject, ObservableObject, ResourceMoni
         // share primaryEngine.player across all displays to avoid duplicate 4K/120Hz decoding
         // and eliminate hardware decoder contention with iPhone Mirroring.
         if settings.displayMode != .perDisplay {
-            for (_, engine) in perDisplayEngines {
+            for engine in perDisplayEngines.values {
                 engine.tearDown()
             }
             perDisplayEngines.removeAll()
@@ -508,16 +531,27 @@ public final class PlaybackCoordinator: NSObject, ObservableObject, ResourceMoni
         for displayID in currentDisplayIDs where displayID != primaryID {
             let key = String(displayID)
             let targetURL: URL
+            var resolvedBookmarkURL: URL?
             if settings.displayMode == .perDisplay,
                let customPath = settings.perDisplayVideoPaths[key] {
-                if let bookmark = settings.perDisplayVideoBookmarks[key],
-                   let result = SecurityBookmarkManager.shared.resolveBookmark(bookmark) {
-                    if result.isStale {
-                        if let fresh = SecurityBookmarkManager.shared.createBookmark(for: result.url) {
-                            settings.perDisplayVideoBookmarks[key] = fresh
+                if let bookmark = settings.perDisplayVideoBookmarks[key] {
+                    if let existingEngine = perDisplayEngines[displayID],
+                       let currentVideo = existingEngine.videoURL,
+                       currentVideo.path == customPath {
+                        targetURL = currentVideo
+                    } else if let result = SecurityBookmarkManager.shared.resolveBookmark(bookmark) {
+                        if result.isStale {
+                            if let fresh = SecurityBookmarkManager.shared.createBookmark(for: result.url) {
+                                settings.perDisplayVideoBookmarks[key] = fresh
+                            }
                         }
+                        targetURL = result.url
+                        resolvedBookmarkURL = result.url
+                    } else if FileManager.default.fileExists(atPath: customPath) {
+                        targetURL = URL(fileURLWithPath: customPath)
+                    } else {
+                        targetURL = url
                     }
-                    targetURL = result.url
                 } else if FileManager.default.fileExists(atPath: customPath) {
                     targetURL = URL(fileURLWithPath: customPath)
                 } else {
@@ -537,12 +571,16 @@ public final class PlaybackCoordinator: NSObject, ObservableObject, ResourceMoni
                 engine = newEngine
             }
             
-            await engine.loadVideo(
-                url: targetURL,
-                targetFPS: settings.targetFPS,
-                isMuted: true, // Secondary displays are muted by default to eliminate audio echo
-                playbackSpeed: settings.playbackSpeed
-            )
+            if engine.videoURL?.standardizedFileURL != targetURL.standardizedFileURL {
+                await engine.loadVideo(
+                    url: targetURL,
+                    targetFPS: settings.targetFPS,
+                    isMuted: true, // Secondary displays are muted by default to eliminate audio echo
+                    playbackSpeed: settings.playbackSpeed
+                )
+            } else if let resolved = resolvedBookmarkURL {
+                SecurityBookmarkManager.shared.stopAccessing(url: resolved)
+            }
             
             if resourceMonitor.activePauseReasons.isEmpty {
                 engine.play()
@@ -553,14 +591,19 @@ public final class PlaybackCoordinator: NSObject, ObservableObject, ResourceMoni
     }
     
     public func setVideoForDisplay(url: URL, displayID: CGDirectDisplayID) {
+        guard case .success(let validatedURL) = FileValidator.validateVideoURL(url) else {
+            AppLogger.playback.error("setVideoForDisplay rejected invalid URL: \(url.path, privacy: .private(mask: .hash))")
+            return
+        }
+        
         let settings = AppSettings.shared
         let key = String(displayID)
         
         var paths = settings.perDisplayVideoPaths
-        paths[key] = url.path
+        paths[key] = validatedURL.path
         settings.perDisplayVideoPaths = paths
         
-        if let bookmark = SecurityBookmarkManager.shared.createBookmark(for: url) {
+        if let bookmark = SecurityBookmarkManager.shared.createBookmark(for: validatedURL) {
             var bookmarks = settings.perDisplayVideoBookmarks
             bookmarks[key] = bookmark
             settings.perDisplayVideoBookmarks = bookmarks
@@ -717,7 +760,7 @@ public final class PlaybackCoordinator: NSObject, ObservableObject, ResourceMoni
         }
         
         if settings.targetFPS != target {
-            NSLog("[PlaybackCoordinator] Adaptive Framerate switching to \(target.shortTitle)")
+            AppLogger.playback.info("Adaptive Framerate switching to \(target.shortTitle, privacy: .public)")
             settings.targetFPS = target
         }
     }
@@ -729,7 +772,7 @@ public final class PlaybackCoordinator: NSObject, ObservableObject, ResourceMoni
     }
     
     public func videoEngineDidEncounterError(_ engine: VideoEngine, error: Error) {
-        NSLog("[PlaybackCoordinator] Video error: \(error.localizedDescription)")
+        AppLogger.playback.error("Video error: \(error.localizedDescription, privacy: .public)")
     }
     
     public func tearDown() {
@@ -744,5 +787,9 @@ public final class PlaybackCoordinator: NSObject, ObservableObject, ResourceMoni
         }
         perDisplayEngines.removeAll()
         SecurityBookmarkManager.shared.stopAccessingAll()
+    }
+    
+    isolated deinit {
+        tearDown()
     }
 }

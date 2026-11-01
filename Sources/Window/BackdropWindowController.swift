@@ -468,8 +468,8 @@ public final class BackdropWindowController: NSWindowController {
         backdropWindow.orderFrontRegardless()
     }
     
-    public func detachPlayer() {
-        playerView.detachPlayer()
+    public func detachPlayer(preserveFrame: Bool = true) {
+        playerView.detachPlayer(preserveFrame: preserveFrame)
     }
     
     public func freezeCurrentFrame() {
@@ -519,7 +519,7 @@ public final class BackdropWindowController: NSWindowController {
     }
     
     public func tearDown() {
-        detachPlayer()
+        detachPlayer(preserveFrame: false)
         webView?.pause()
         metalView?.pause()
         particleView.pause()

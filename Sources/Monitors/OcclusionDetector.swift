@@ -13,6 +13,7 @@ public final class OcclusionDetector {
     private var checkTimer: Timer?
     private var debounceTimer: Timer?
     private var isEnabled: Bool = true
+    private var observerTokens: [NSObjectProtocol] = []
     public private(set) var occludedDisplays: Set<CGDirectDisplayID> = []
     
     public init() {
@@ -21,6 +22,7 @@ public final class OcclusionDetector {
     
     public func start() {
         stop()
+        setupObservers()
         // Periodic occlusion check every 12 seconds.
         // CGWindowListCopyWindowInfo is expensive; NSWorkspace notifications (app switch, active Space changed)
         // trigger debounced evaluation instantly, so 12s background polling is optimal.
@@ -38,6 +40,7 @@ public final class OcclusionDetector {
         checkTimer = nil
         debounceTimer?.invalidate()
         debounceTimer = nil
+        tearDownObservers()
         occludedDisplays.removeAll()
     }
     
@@ -52,9 +55,10 @@ public final class OcclusionDetector {
     }
     
     private func setupObservers() {
+        tearDownObservers()
         // Debounce workspace transitions so "Show Desktop", Mission Control, and 3-finger Spaces gestures remain silky smooth
         // Allowing 0.9s delay ensures WindowServer's interactive gesture animations have 100% finished before querying window info
-        NSWorkspace.shared.notificationCenter.addObserver(
+        let obs1 = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification,
             object: nil,
             queue: .main
@@ -64,8 +68,9 @@ public final class OcclusionDetector {
                 self.scheduleEvaluation(delay: 0.9)
             }
         }
+        observerTokens.append(obs1)
         
-        NSWorkspace.shared.notificationCenter.addObserver(
+        let obs2 = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.activeSpaceDidChangeNotification,
             object: nil,
             queue: .main
@@ -75,6 +80,14 @@ public final class OcclusionDetector {
                 self.scheduleEvaluation(delay: 0.9)
             }
         }
+        observerTokens.append(obs2)
+    }
+    
+    private func tearDownObservers() {
+        for token in observerTokens {
+            NSWorkspace.shared.notificationCenter.removeObserver(token)
+        }
+        observerTokens.removeAll()
     }
     
     private func scheduleEvaluation(delay: TimeInterval) {
@@ -153,5 +166,10 @@ public final class OcclusionDetector {
             occludedDisplays = newOccluded
             delegate?.occlusionDetectorDidChangeState(occludedDisplays: newOccluded)
         }
+    }
+    
+    isolated deinit {
+        stop()
+        tearDownObservers()
     }
 }

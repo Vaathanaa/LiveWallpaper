@@ -4,7 +4,7 @@ import WebKit
 @MainActor
 public final class WebBackdropView: NSView, WKNavigationDelegate, WKUIDelegate {
     
-    public private(set) var webView: WKWebView!
+    public private(set) var webView: WKWebView?
     private var isCurrentlyPaused: Bool = false
     
     public override init(frame frameRect: NSRect) {
@@ -78,15 +78,15 @@ public final class WebBackdropView: NSView, WKNavigationDelegate, WKUIDelegate {
         transition.duration = 0.35
         transition.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
         layer?.add(transition, forKey: "webPresetFade")
-        webView.loadHTMLString(htmlContent, baseURL: nil)
+        webView?.loadHTMLString(htmlContent, baseURL: nil)
     }
     
     public func loadURL(_ url: URL) {
         if url.isFileURL {
-            webView.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())
+            webView?.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())
         } else {
             let request = URLRequest(url: url, cachePolicy: .returnCacheDataElseLoad, timeoutInterval: 15.0)
-            webView.load(request)
+            webView?.load(request)
         }
     }
     
@@ -95,7 +95,7 @@ public final class WebBackdropView: NSView, WKNavigationDelegate, WKUIDelegate {
     public func updateMousePosition(normalizedX: Double, normalizedY: Double, point: CGPoint) {
         guard !isCurrentlyPaused, AppSettings.shared.isMouseInteractionEnabled else { return }
         let js = "if (window.onDesktopMouseMove) { window.onDesktopMouseMove(\(normalizedX), \(normalizedY), \(point.x), \(point.y)); }"
-        webView.evaluateJavaScript(js, completionHandler: nil)
+        webView?.evaluateJavaScript(js, completionHandler: nil)
     }
     
     // MARK: - Resource Optimization & Sleep
@@ -103,14 +103,14 @@ public final class WebBackdropView: NSView, WKNavigationDelegate, WKUIDelegate {
     public func pause() {
         guard !isCurrentlyPaused else { return }
         isCurrentlyPaused = true
-        webView.pauseAllMediaPlayback()
-        webView.evaluateJavaScript("if (window.onWallpaperPause) { window.onWallpaperPause(); }", completionHandler: nil)
+        webView?.pauseAllMediaPlayback()
+        webView?.evaluateJavaScript("if (window.onWallpaperPause) { window.onWallpaperPause(); }", completionHandler: nil)
     }
     
     public func resume() {
         guard isCurrentlyPaused else { return }
         isCurrentlyPaused = false
-        webView.evaluateJavaScript("if (window.onWallpaperResume) { window.onWallpaperResume(); }", completionHandler: nil)
+        webView?.evaluateJavaScript("if (window.onWallpaperResume) { window.onWallpaperResume(); }", completionHandler: nil)
     }
     
     // MARK: - Built-in M3 Pro Optimized Shader Presets
@@ -453,4 +453,10 @@ public final class WebBackdropView: NSView, WKNavigationDelegate, WKUIDelegate {
     </body>
     </html>
     """
+    
+    isolated deinit {
+        webView?.navigationDelegate = nil
+        webView?.uiDelegate = nil
+        webView?.stopLoading()
+    }
 }

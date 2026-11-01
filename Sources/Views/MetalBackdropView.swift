@@ -12,7 +12,7 @@ public struct ShaderUniforms {
 
 @MainActor
 public final class MetalBackdropView: NSView {
-    private var metalLayer: CAMetalLayer!
+    private var metalLayer: CAMetalLayer?
     private var device: MTLDevice?
     private var commandQueue: MTLCommandQueue?
     private var pipelineState: MTLRenderPipelineState?
@@ -43,7 +43,7 @@ public final class MetalBackdropView: NSView {
     private func setupMetal() {
         wantsLayer = true
         guard let device = MTLCreateSystemDefaultDevice() else {
-            NSLog("[MetalBackdropView] No Metal device available on Apple Silicon.")
+            AppLogger.video.error("No Metal device available on Apple Silicon.")
             return
         }
         self.device = device
@@ -244,7 +244,7 @@ public final class MetalBackdropView: NSView {
             
             self.pipelineState = try device.makeRenderPipelineState(descriptor: pipelineDescriptor)
         } catch {
-            NSLog("[MetalBackdropView] Pipeline creation failed: %@", error.localizedDescription)
+            AppLogger.video.error("Pipeline creation failed: \(error.localizedDescription, privacy: .public)")
         }
     }
     

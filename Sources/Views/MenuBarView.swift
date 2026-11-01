@@ -64,7 +64,7 @@ public struct MenuBarView: View {
             
             // Settings Window
             Button(action: {
-                AppDelegate.shared.openSettingsWindow()
+                AppDelegate.shared?.openSettingsWindow()
             }) {
                 Label("Settings...", systemImage: "gearshape")
             }
@@ -113,8 +113,10 @@ public struct MenuBarView: View {
             }
             
             if response == .OK, let url = panel.url {
-                AppSettings.shared.contentType = .video
-                PlaybackCoordinator.shared.loadVideo(url: url)
+                if case .success(let validURL) = FileValidator.validateVideoURL(url) {
+                    AppSettings.shared.contentType = .video
+                    PlaybackCoordinator.shared.loadVideo(url: validURL)
+                }
             }
         }
     }

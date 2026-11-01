@@ -11,6 +11,7 @@ public final class MiniPlayerVideoNSView: NSView {
         layer?.backgroundColor = NSColor.black.cgColor
         playerLayer.videoGravity = .resizeAspectFill
         playerLayer.masksToBounds = true
+        playerLayer.drawsAsynchronously = true
         playerLayer.player = PlaybackCoordinator.shared.primaryEngine.player
         layer?.addSublayer(playerLayer)
     }
@@ -50,7 +51,7 @@ public struct MiniPlayerCardView: View {
     @State private var scrubProgress: Double = 0.0
     @State private var isPlaying: Bool = true
     
-    private let timer = Timer.publish(every: 0.2, on: .main, in: .common).autoconnect()
+    private let timer = Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()
     
     public init() {}
     

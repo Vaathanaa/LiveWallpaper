@@ -36,12 +36,12 @@ public final class LockScreenPosterManager {
         
         if FileManager.default.fileExists(atPath: indexURL.path) && !FileManager.default.fileExists(atPath: backupURL.path) {
             try? FileManager.default.copyItem(at: indexURL, to: backupURL)
-            NSLog("[LockScreenPosterManager] Created system wallpaper Index.plist.backup")
+            AppLogger.poster.info("Created system wallpaper Index.plist.backup")
         }
     }
     
     public func updateLockScreenPoster(for asset: AVAsset, at time: CMTime = .zero) {
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        guard let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else { return }
         let liveWallpaperDir = appSupport.appendingPathComponent("LiveWallpaper", isDirectory: true)
         let videoBackdropDir = appSupport.appendingPathComponent("VideoBackdrop", isDirectory: true)
         let home = FileManager.default.homeDirectoryForCurrentUser
@@ -90,7 +90,7 @@ public final class LockScreenPosterManager {
                             if FileManager.default.fileExists(atPath: userDir, isDirectory: &isDir), isDir.boolValue {
                                 let lockscreenPNG = (userDir as NSString).appendingPathComponent("lockscreen.png")
                                 try? pngData.write(to: URL(fileURLWithPath: lockscreenPNG), options: .atomic)
-                                NSLog("[LockScreenPosterManager] Successfully updated system lockscreen.png at: %@", lockscreenPNG)
+                                AppLogger.poster.info("Successfully updated system lockscreen.png at: \(lockscreenPNG, privacy: .private(mask: .hash))")
                             }
                         }
                     }
@@ -107,7 +107,7 @@ public final class LockScreenPosterManager {
                         do {
                             try NSWorkspace.shared.setDesktopImageURL(stableURL, for: screen, options: options)
                         } catch {
-                            NSLog("[LockScreenPosterManager] Warning setting desktop image: \(error.localizedDescription)")
+                            AppLogger.poster.warning("Warning setting desktop image: \(error.localizedDescription, privacy: .public)")
                         }
                     }
                     
@@ -134,14 +134,14 @@ public final class LockScreenPosterManager {
                     }
                 }
             } catch {
-                NSLog("[LockScreenPosterManager] Error extracting frame: \(error.localizedDescription)")
+                AppLogger.poster.error("Error extracting frame: \(error.localizedDescription, privacy: .public)")
             }
         }
     }
     
     /// Synchronizes the active video directly to macOS's native 120Hz Screen Saver and caches
     public func syncScreenSaverVideo(from sourceURL: URL, asset: AVAsset) {
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        guard let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else { return }
         let liveWallpaperDir = appSupport.appendingPathComponent("LiveWallpaper", isDirectory: true)
         let videoBackdropDir = appSupport.appendingPathComponent("VideoBackdrop", isDirectory: true)
         
@@ -271,9 +271,9 @@ public final class LockScreenPosterManager {
                     try? FileManager.default.copyItem(atPath: saverPath, toPath: legacySaver)
                 }
                 
-                NSLog("[LockScreenPosterManager] Synchronized video to native Aerials and LiveWallpaper.saver!")
+                AppLogger.poster.info("Synchronized video to native Aerials and LiveWallpaper.saver!")
             } catch {
-                NSLog("[LockScreenPosterManager] Warning syncing screensaver video: \(error.localizedDescription)")
+                AppLogger.poster.warning("Warning syncing screensaver video: \(error.localizedDescription, privacy: .public)")
             }
         }
     }
@@ -460,7 +460,7 @@ public final class LockScreenPosterManager {
     
     /// Restores default macOS wallpaper and lock screen on quit
     public func restoreOriginalWallpapers() {
-        NSLog("[LockScreenPosterManager] Restoring macOS default wallpaper and lock screen...")
+        AppLogger.poster.info("Restoring macOS default wallpaper and lock screen...")
         let defaultWallpaperURL = URL(fileURLWithPath: "/System/Library/CoreServices/DefaultDesktop.heic")
         let home = FileManager.default.homeDirectoryForCurrentUser
         
@@ -495,7 +495,7 @@ public final class LockScreenPosterManager {
                     let lockscreenPNG = (userDir as NSString).appendingPathComponent("lockscreen.png")
                     if FileManager.default.fileExists(atPath: lockscreenPNG) {
                         try? FileManager.default.removeItem(atPath: lockscreenPNG)
-                        NSLog("[LockScreenPosterManager] Removed lockscreen.png cache at: %@", lockscreenPNG)
+                        AppLogger.poster.info("Removed lockscreen.png cache at: \(lockscreenPNG, privacy: .public)")
                     }
                 }
             }
@@ -546,7 +546,7 @@ public final class LockScreenPosterManager {
         task.arguments = ["WallpaperAgent"]
         try? task.run()
         task.waitUntilExit()
-        NSLog("[LockScreenPosterManager] macOS Default wallpaper successfully restored!")
+        AppLogger.poster.info("macOS Default wallpaper successfully restored!")
     }
     
     public nonisolated static func restoreIndexPlistIdleToDefault() {

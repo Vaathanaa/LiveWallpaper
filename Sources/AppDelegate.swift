@@ -4,12 +4,14 @@ import Darwin
 
 @MainActor
 public final class AppDelegate: NSObject, NSApplicationDelegate, StatusMenuControllerDelegate, NSWindowDelegate {
-    public static private(set) var shared: AppDelegate!
+    public static private(set) var shared: AppDelegate?
     
     private var menuController: StatusMenuController?
     private var settingsWindowController: NSWindowController?
     private var sigtermSource: DispatchSourceSignal?
     private var sigintSource: DispatchSourceSignal?
+    private var remoteCommandObservers: [NSObjectProtocol] = []
+    private var windowCloseObserver: NSObjectProtocol?
     private static var singleInstanceLockFD: Int32 = -1
     
     public override init() {
@@ -18,7 +20,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, StatusMenuContr
     }
     
     private static func acquireSingleInstanceLock() -> Bool {
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        guard let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
+            return true
+        }
         let appDir = appSupport.appendingPathComponent("LiveWallpaper", isDirectory: true)
         try? FileManager.default.createDirectory(at: appDir, withIntermediateDirectories: true)
         let lockURL = appDir.appendingPathComponent("LiveWallpaper.lock")
@@ -38,7 +42,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, StatusMenuContr
     public func applicationDidFinishLaunching(_ notification: Notification) {
         // 1. Enforce Single-Instance: If another instance of LiveWallpaper is already running, activate it and exit immediately
         if !Self.acquireSingleInstanceLock() {
-            NSLog("[LiveWallpaper] Duplicate instance detected. Activating existing instance and exiting.")
+            AppLogger.general.info("Duplicate instance detected. Activating existing instance and exiting.")
             
             // Notify existing instance to bring its menu or settings to front
             DistributedNotificationCenter.default().postNotificationName(
@@ -84,7 +88,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, StatusMenuContr
         
         setupRemoteCommands()
         
-        NSLog("[LiveWallpaper] Launched successfully.")
+        AppLogger.general.info("Launched successfully.")
     }
     
     private func setupSignalHandlers() {
@@ -108,7 +112,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, StatusMenuContr
     private func setupRemoteCommands() {
         let center = DistributedNotificationCenter.default()
         
-        center.addObserver(
+        let obs1 = center.addObserver(
             forName: NSNotification.Name("com.local.LiveWallpaper.loadVideo"),
             object: nil,
             queue: .main
@@ -125,8 +129,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, StatusMenuContr
                 }
             }
         }
+        remoteCommandObservers.append(obs1)
         
-        center.addObserver(
+        let obs2 = center.addObserver(
             forName: NSNotification.Name("com.local.LiveWallpaper.setMode"),
             object: nil,
             queue: .main
@@ -165,8 +170,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, StatusMenuContr
                 }
             }
         }
+        remoteCommandObservers.append(obs2)
         
-        center.addObserver(
+        let obs3 = center.addObserver(
             forName: NSNotification.Name("com.local.LiveWallpaper.togglePlayPause"),
             object: nil,
             queue: .main
@@ -175,8 +181,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, StatusMenuContr
                 PlaybackCoordinator.shared.togglePlayPause()
             }
         }
+        remoteCommandObservers.append(obs3)
         
-        center.addObserver(
+        let obs4 = center.addObserver(
             forName: NSNotification.Name("com.local.LiveWallpaper.pause"),
             object: nil,
             queue: .main
@@ -186,8 +193,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, StatusMenuContr
                 PlaybackCoordinator.shared.resourceMonitor.evaluateAllConditions()
             }
         }
+        remoteCommandObservers.append(obs4)
         
-        center.addObserver(
+        let obs5 = center.addObserver(
             forName: NSNotification.Name("com.local.LiveWallpaper.play"),
             object: nil,
             queue: .main
@@ -197,8 +205,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, StatusMenuContr
                 PlaybackCoordinator.shared.resourceMonitor.evaluateAllConditions()
             }
         }
+        remoteCommandObservers.append(obs5)
         
-        center.addObserver(
+        let obs6 = center.addObserver(
             forName: NSNotification.Name("com.local.LiveWallpaper.openSettings"),
             object: nil,
             queue: .main
@@ -206,6 +215,23 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, StatusMenuContr
             guard let self = self else { return }
             Task { @MainActor in
                 self.openSettingsWindow()
+            }
+        }
+        remoteCommandObservers.append(obs6)
+        
+        setupWindowCloseObserver()
+    }
+    
+    private func setupWindowCloseObserver() {
+        if windowCloseObserver == nil {
+            windowCloseObserver = NotificationCenter.default.addObserver(
+                forName: NSWindow.willCloseNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] notification in
+                Task { @MainActor in
+                    self?.handleWindowWillClose(notification)
+                }
             }
         }
     }
@@ -217,12 +243,22 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, StatusMenuContr
     }
     
     public func applicationWillTerminate(_ notification: Notification) {
-        NSLog("[LiveWallpaper] Terminating: restoring static desktop wallpaper.")
+        AppLogger.general.info("Terminating: restoring static desktop wallpaper.")
         PlaybackCoordinator.shared.tearDown()
         WindowManager.shared.tearDown()
         
         // Restore original system wallpaper
         LockScreenPosterManager.shared.restoreOriginalWallpapers()
+        
+        for observer in remoteCommandObservers {
+            DistributedNotificationCenter.default().removeObserver(observer)
+        }
+        remoteCommandObservers.removeAll()
+        
+        if let closeObs = windowCloseObserver {
+            NotificationCenter.default.removeObserver(closeObs)
+            windowCloseObserver = nil
+        }
         
         if Self.singleInstanceLockFD >= 0 {
             flock(Self.singleInstanceLockFD, LOCK_UN)
@@ -263,10 +299,32 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, StatusMenuContr
     }
     
     public func windowWillClose(_ notification: Notification) {
-        if let window = notification.object as? NSWindow, window === settingsWindowController?.window {
-            SystemDiagnostics.shared.stopMonitoring()
-            // Hide the Dock icon when the main settings window is closed
-            NSApp.setActivationPolicy(.accessory)
+        handleWindowWillClose(notification)
+    }
+    
+    private func handleWindowWillClose(_ notification: Notification) {
+        guard let closedWindow = notification.object as? NSWindow, !(closedWindow is BackdropWindow) else {
+            return
+        }
+        SystemDiagnostics.shared.stopMonitoring()
+        
+        DispatchQueue.main.async {
+            let remainingUserWindows = NSApp.windows.filter { w in
+                w !== closedWindow && w.isVisible && !(w is BackdropWindow) && w.className != "NSStatusBarWindow"
+            }
+            if remainingUserWindows.isEmpty {
+                // Hide the Dock icon when all settings/main windows are closed
+                NSApp.setActivationPolicy(.accessory)
+            }
+        }
+    }
+    
+    deinit {
+        for observer in remoteCommandObservers {
+            DistributedNotificationCenter.default().removeObserver(observer)
+        }
+        if let closeObs = windowCloseObserver {
+            NotificationCenter.default.removeObserver(closeObs)
         }
     }
 }

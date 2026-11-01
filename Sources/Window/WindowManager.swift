@@ -6,7 +6,7 @@ import Combine
 public final class WindowManager: NSObject, MouseMotionTrackerDelegate {
     public static let shared = WindowManager()
     
-    private var windowControllers: [CGDirectDisplayID: BackdropWindowController] = [:]
+    public private(set) var windowControllers: [CGDirectDisplayID: BackdropWindowController] = [:]
     private var cancellables = Set<AnyCancellable>()
     
     private override init() {
@@ -144,10 +144,10 @@ public final class WindowManager: NSObject, MouseMotionTrackerDelegate {
             screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID
         })
         
-        for (displayID, controller) in windowControllers {
-            if !currentDisplayIDs.contains(displayID) {
+        let removedIDs = windowControllers.keys.filter { !currentDisplayIDs.contains($0) }
+        for displayID in removedIDs {
+            if let controller = windowControllers.removeValue(forKey: displayID) {
                 controller.tearDown()
-                windowControllers.removeValue(forKey: displayID)
             }
         }
         
@@ -293,10 +293,18 @@ public final class WindowManager: NSObject, MouseMotionTrackerDelegate {
     }
     
     public func tearDown() {
+        NotificationCenter.default.removeObserver(self)
+        NSWorkspace.shared.notificationCenter.removeObserver(self)
+        cancellables.removeAll()
         MouseMotionTracker.shared.stop()
         for controller in windowControllers.values {
             controller.tearDown()
         }
         windowControllers.removeAll()
+    }
+    
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+        NSWorkspace.shared.notificationCenter.removeObserver(self)
     }
 }

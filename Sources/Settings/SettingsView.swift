@@ -1024,7 +1024,9 @@ public struct SettingsView: View {
         
         NSApp.activate(ignoringOtherApps: true)
         if panel.runModal() == .OK, let url = panel.url {
-            completion(url)
+            if case .success(let validURL) = FileValidator.validateVideoURL(url) {
+                completion(validURL)
+            }
         }
     }
     
@@ -1059,7 +1061,8 @@ public struct SettingsView: View {
         
         NSApp.activate(ignoringOtherApps: true)
         if panel.runModal() == .OK {
-            completion(panel.urls)
+            let validURLs = panel.urls.compactMap { try? FileValidator.validateVideoURL($0).get() }
+            completion(validURLs)
         }
     }
     
@@ -1074,12 +1077,8 @@ public struct SettingsView: View {
         
         NSApp.activate(ignoringOtherApps: true)
         if panel.runModal() == .OK, let folderURL = panel.url {
-            let fm = FileManager.default
-            if let files = try? fm.contentsOfDirectory(at: folderURL, includingPropertiesForKeys: nil) {
-                let videoExtensions = ["mp4", "mov", "m4v"]
-                let videoURLs = files.filter { videoExtensions.contains($0.pathExtension.lowercased()) }
-                completion(videoURLs)
-            }
+            let validURLs = FileValidator.validateFolder(url: folderURL)
+            completion(validURLs)
         }
     }
     

@@ -515,4 +515,323 @@ final class LiveWallpaperTests: XCTestCase {
         coordinator.advancePlaylist(direction: .previous)
         XCTAssertEqual(coordinator.currentPlaylistIndex, 2, "Playlist should wrap backward to 2")
     }
+    
+    // MARK: - 9. FileValidator Security Tests
+    
+    func testFileValidatorValidVideo() {
+        let sampleURL = sampleVideoURL
+        let result = FileValidator.validateVideoURL(sampleURL)
+        switch result {
+        case .success(let validatedURL):
+            XCTAssertEqual(validatedURL.standardizedFileURL.path, sampleURL.standardizedFileURL.path)
+        case .failure(let error):
+            XCTFail("Expected valid video file to succeed, got error: \(error)")
+        }
+    }
+    
+    func testFileValidatorNonFileURL() {
+        guard let remoteURL = URL(string: "https://example.com/video.mp4") else {
+            XCTFail("Failed to construct remote URL")
+            return
+        }
+        let result = FileValidator.validateVideoURL(remoteURL)
+        switch result {
+        case .success:
+            XCTFail("Remote URL must be rejected by FileValidator")
+        case .failure(let error):
+            XCTAssertEqual(error, .notAFileURL)
+        }
+    }
+    
+    func testFileValidatorPathTraversal() {
+        let traversalURL = URL(fileURLWithPath: "/System/Library/../etc/passwd")
+        let result = FileValidator.validateVideoURL(traversalURL)
+        switch result {
+        case .success:
+            XCTFail("Path traversal URL must be rejected by FileValidator")
+        case .failure(let error):
+            XCTAssertEqual(error, .pathTraversalAttempt)
+        }
+    }
+    
+    func testFileValidatorNonExistentFile() {
+        let missingURL = URL(fileURLWithPath: "/tmp/non_existent_video_\(UUID().uuidString).mp4")
+        let result = FileValidator.validateVideoURL(missingURL)
+        switch result {
+        case .success:
+            XCTFail("Non-existent file must be rejected by FileValidator")
+        case .failure(let error):
+            XCTAssertEqual(error, .fileDoesNotExist)
+        }
+    }
+    
+    func testFileValidatorUnsupportedFileType() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+        let textFileURL = tempDir.appendingPathComponent("test_unsupported_\(UUID().uuidString).txt")
+        try "Not a video file".write(to: textFileURL, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: textFileURL) }
+        
+        let result = FileValidator.validateVideoURL(textFileURL)
+        switch result {
+        case .success:
+            XCTFail("Text file must be rejected as unsupported file type")
+        case .failure(let error):
+            if case .unsupportedContentType = error {
+                // Expected
+            } else {
+                XCTFail("Expected unsupportedContentType, got \(error)")
+            }
+        }
+    }
+    
+    func testFileValidatorSymlinkRejection() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+        let symlinkURL = tempDir.appendingPathComponent("test_symlink_\(UUID().uuidString).mp4")
+        try? FileManager.default.removeItem(at: symlinkURL)
+        try FileManager.default.createSymbolicLink(at: symlinkURL, withDestinationURL: sampleVideoURL)
+        defer { try? FileManager.default.removeItem(at: symlinkURL) }
+        
+        let result = FileValidator.validateVideoURL(symlinkURL)
+        switch result {
+        case .success:
+            XCTFail("Symlink must be rejected by FileValidator for security sandbox integrity")
+        case .failure(let error):
+            XCTAssertEqual(error, .isSymbolicLink)
+        }
+    }
+    
+    func testFileValidatorValidateFolder() throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("test_folder_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+        
+        let textFileURL = tempDir.appendingPathComponent("note.txt")
+        try "Ignore me".write(to: textFileURL, atomically: true, encoding: .utf8)
+        
+        let videoCopyURL = tempDir.appendingPathComponent("valid_video.mp4")
+        try FileManager.default.copyItem(at: sampleVideoURL, to: videoCopyURL)
+        
+        let validVideos = FileValidator.validateFolder(url: tempDir)
+        XCTAssertEqual(validVideos.count, 1)
+        XCTAssertEqual(validVideos.first?.lastPathComponent, "valid_video.mp4")
+    }
+
+    // MARK: - 10. SecurityBookmarkManager Ref-Counting & Lifecycle Tests
+    
+    func testSecurityBookmarkReferenceCountingLifecycle() {
+        let sampleURL = sampleVideoURL
+        SecurityBookmarkManager.shared.stopAccessingAll()
+        XCTAssertEqual(SecurityBookmarkManager.shared.activeAccessCount(for: sampleURL), 0)
+        
+        guard let bookmarkData = SecurityBookmarkManager.shared.createBookmark(for: sampleURL) else {
+            XCTFail("Bookmark creation failed")
+            return
+        }
+        defer {
+            SecurityBookmarkManager.shared.stopAccessingAll()
+        }
+        
+        // Resolving bookmark increments reference count to 1
+        guard let resolved = SecurityBookmarkManager.shared.resolveBookmark(bookmarkData) else {
+            XCTFail("Failed to resolve bookmark")
+            return
+        }
+        XCTAssertEqual(SecurityBookmarkManager.shared.activeAccessCount(for: resolved.url), 1)
+        XCTAssertTrue(SecurityBookmarkManager.shared.activeURLs.contains(resolved.url))
+        
+        // Resolving again increments reference count to 2
+        let resolved2 = SecurityBookmarkManager.shared.resolveBookmark(bookmarkData)
+        XCTAssertNotNil(resolved2)
+        XCTAssertEqual(SecurityBookmarkManager.shared.activeAccessCount(for: resolved.url), 2)
+        
+        // First stopAccessing decrements to 1
+        SecurityBookmarkManager.shared.stopAccessing(url: resolved.url)
+        XCTAssertEqual(SecurityBookmarkManager.shared.activeAccessCount(for: resolved.url), 1)
+        XCTAssertTrue(SecurityBookmarkManager.shared.activeURLs.contains(resolved.url))
+        
+        // Second stopAccessing decrements to 0 and removes URL
+        SecurityBookmarkManager.shared.stopAccessing(url: resolved.url)
+        XCTAssertEqual(SecurityBookmarkManager.shared.activeAccessCount(for: resolved.url), 0)
+        XCTAssertFalse(SecurityBookmarkManager.shared.activeURLs.contains(resolved.url))
+    }
+
+    // MARK: - 11. Multi-Display Window & Engine Reconnection Tests
+
+    @MainActor
+    func testWindowManagerRebuildWindowsSafety() {
+        let wm = WindowManager.shared
+        // Call rebuildWindows multiple times in succession to verify no dictionary mutation crash
+        wm.rebuildWindows()
+        wm.rebuildWindows()
+        wm.rebuildWindows()
+        XCTAssertFalse(wm.windowControllers.isEmpty)
+    }
+
+    @MainActor
+    func testPlaybackCoordinatorVideoSwitchAndTeardownLifecycle() async {
+        let coordinator = PlaybackCoordinator.shared
+        let sampleURL = sampleVideoURL
+        
+        // Load video
+        coordinator.loadVideo(url: sampleURL)
+        
+        // Await asynchronous engine pipeline setup
+        try? await Task.sleep(nanoseconds: 200_000_000)
+        XCTAssertEqual(coordinator.primaryEngine.videoURL, sampleURL)
+        
+        // Teardown and cleanup
+        coordinator.tearDown()
+        SecurityBookmarkManager.shared.stopAccessingAll()
+        XCTAssertEqual(SecurityBookmarkManager.shared.activeAccessCount(for: sampleURL), 0)
+    }
+
+    // MARK: - 12. Day/Night Evaluation & Bookmark Stability Tests
+
+    @MainActor
+    func testDayNightEvaluationAccessCountStability() async {
+        let coordinator = PlaybackCoordinator.shared
+        let sampleURL = sampleVideoURL
+        SecurityBookmarkManager.shared.stopAccessingAll()
+        
+        guard let bookmark = SecurityBookmarkManager.shared.createBookmark(for: sampleURL) else {
+            XCTFail("Failed to create bookmark")
+            return
+        }
+        
+        let settings = AppSettings.shared
+        let origDayNight = settings.isDayNightEnabled
+        let origDayBm = settings.dayVideoBookmark
+        let origNightBm = settings.nightVideoBookmark
+        let origDayPath = settings.dayVideoPath
+        let origNightPath = settings.nightVideoPath
+        
+        defer {
+            settings.isDayNightEnabled = origDayNight
+            settings.dayVideoBookmark = origDayBm
+            settings.nightVideoBookmark = origNightBm
+            settings.dayVideoPath = origDayPath
+            settings.nightVideoPath = origNightPath
+            coordinator.tearDown()
+            SecurityBookmarkManager.shared.stopAccessingAll()
+        }
+        
+        settings.isDayNightEnabled = true
+        settings.dayVideoBookmark = bookmark
+        settings.nightVideoBookmark = bookmark
+        settings.dayVideoPath = sampleURL.path
+        settings.nightVideoPath = sampleURL.path
+        
+        // Initial evaluation loads the video
+        coordinator.evaluateDayNightMode()
+        try? await Task.sleep(nanoseconds: 100_000_000)
+        
+        let initialCount = SecurityBookmarkManager.shared.activeAccessCount(for: sampleURL)
+        XCTAssertLessThanOrEqual(initialCount, 1)
+        
+        // Evaluate repeatedly - access count must remain balanced and not leak
+        for _ in 0..<10 {
+            coordinator.evaluateDayNightMode()
+        }
+        
+        let subsequentCount = SecurityBookmarkManager.shared.activeAccessCount(for: sampleURL)
+        XCTAssertEqual(subsequentCount, initialCount, "Repeated evaluateDayNightMode() must not leak security bookmark access tokens")
+    }
+
+    // MARK: - 13. Display Sleep & Audio Configuration Tests
+
+    @MainActor
+    func testVideoEnginePreventsDisplaySleepIsDisabled() {
+        let engine = VideoEngine()
+        XCTAssertFalse(
+            engine.player.preventsDisplaySleepDuringVideoPlayback,
+            "VideoEngine player must have preventsDisplaySleepDuringVideoPlayback == false to permit macOS idle display sleep"
+        )
+        engine.tearDown()
+    }
+
+    @MainActor
+    func testVideoEngineAudioTrackMutingBehavior() async {
+        let engine = VideoEngine()
+        let sampleURL = sampleVideoURL
+        
+        await engine.loadVideo(url: sampleURL, targetFPS: .fps60, isMuted: true)
+        XCTAssertTrue(engine.player.isMuted)
+        XCTAssertEqual(engine.player.volume, 0.0)
+        
+        // Verify audio configuration application
+        if let currentItem = engine.player.currentItem {
+            for track in currentItem.tracks where track.assetTrack?.mediaType == .audio {
+                XCTAssertFalse(track.isEnabled, "Audio tracks must be disabled when isMuted is true")
+            }
+        }
+        
+        engine.tearDown()
+        SecurityBookmarkManager.shared.stopAccessingAll()
+    }
+
+    // MARK: - 14. Advanced Path Traversal Security Tests
+
+    func testFileValidatorRejectsPercentEncodedTraversal() {
+        let dangerousPaths = [
+            "file:///Users/Shared/%2e%2e/test.mp4",
+            "file:///Users/Shared/%2e%2e/%2e%2e/etc/passwd.mp4",
+            "file:///Users/Shared/video%2f..%2fevil.mp4",
+            "file:///Users/Shared/sub/..%2f../secret.mp4",
+            "file:///Users/Shared/../root.mp4"
+        ]
+        
+        for pathString in dangerousPaths {
+            if let dangerousURL = URL(string: pathString) {
+                let result = FileValidator.validateVideoURL(dangerousURL)
+                switch result {
+                case .success:
+                    XCTFail("FileValidator failed to reject path traversal: \(pathString)")
+                case .failure(let error):
+                    XCTAssertEqual(error, .pathTraversalAttempt, "Expected pathTraversalAttempt for \(pathString), got \(error)")
+                }
+            }
+        }
+    }
+
+    // MARK: - 15. Multi-Display Engine Bookmark Balancing Tests
+
+    @MainActor
+    func testMultiDisplayEngineBookmarkBalancing() async {
+        let coordinator = PlaybackCoordinator.shared
+        let sampleURL = sampleVideoURL
+        SecurityBookmarkManager.shared.stopAccessingAll()
+        
+        guard let bookmark = SecurityBookmarkManager.shared.createBookmark(for: sampleURL) else {
+            XCTFail("Failed to create bookmark")
+            return
+        }
+        
+        let settings = AppSettings.shared
+        let origDisplayMode = settings.displayMode
+        let origPerDisplayBm = settings.perDisplayVideoBookmarks
+        let origPerDisplayPaths = settings.perDisplayVideoPaths
+        
+        defer {
+            settings.displayMode = origDisplayMode
+            settings.perDisplayVideoBookmarks = origPerDisplayBm
+            settings.perDisplayVideoPaths = origPerDisplayPaths
+            coordinator.tearDown()
+            SecurityBookmarkManager.shared.stopAccessingAll()
+        }
+        
+        settings.displayMode = .perDisplay
+        let displayKey = "99999" // simulated non-primary display key
+        settings.perDisplayVideoPaths = [displayKey: sampleURL.path]
+        settings.perDisplayVideoBookmarks = [displayKey: bookmark]
+        
+        // Call updateSecondaryEngines repeatedly
+        await coordinator.updateSecondaryEngines(url: sampleURL)
+        let countAfterFirst = SecurityBookmarkManager.shared.activeAccessCount(for: sampleURL)
+        
+        await coordinator.updateSecondaryEngines(url: sampleURL)
+        await coordinator.updateSecondaryEngines(url: sampleURL)
+        let countAfterRepeated = SecurityBookmarkManager.shared.activeAccessCount(for: sampleURL)
+        
+        XCTAssertEqual(countAfterFirst, countAfterRepeated, "Repeated updateSecondaryEngines must not accumulate bookmark access tokens")
+    }
 }

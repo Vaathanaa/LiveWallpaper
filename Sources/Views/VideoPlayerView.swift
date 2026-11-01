@@ -5,7 +5,7 @@ import CoreImage
 public final class VideoPlayerView: NSView {
     
     public var playerLayer: AVPlayerLayer {
-        return layer as! AVPlayerLayer
+        return (layer as? AVPlayerLayer) ?? AVPlayerLayer()
     }
     
     private let dimmingOverlayLayer = CALayer()
@@ -34,7 +34,7 @@ public final class VideoPlayerView: NSView {
         
         // Instant Startup Frame: Load cached lockscreen_poster.jpg so the very first millisecond
         // the backdrop window opens, it displays the crisp wallpaper frame with ZERO black gap!
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        guard let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else { return }
         let posterURL = appSupport.appendingPathComponent("LiveWallpaper/lockscreen_poster.jpg")
         if FileManager.default.fileExists(atPath: posterURL.path),
            let image = NSImage(contentsOf: posterURL),
@@ -91,6 +91,7 @@ public final class VideoPlayerView: NSView {
         // tracking custom-scaled accessibility mouse pointers).
         playerLayer.isOpaque = true
         playerLayer.opacity = 1.0
+        playerLayer.drawsAsynchronously = true
         playerLayer.videoGravity = .resizeAspectFill
         playerLayer.autoresizingMask = [.layerWidthSizable, .layerHeightSizable]
         playerLayer.needsDisplayOnBoundsChange = false
