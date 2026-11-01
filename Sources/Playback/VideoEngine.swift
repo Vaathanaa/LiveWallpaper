@@ -42,6 +42,7 @@ public final class VideoEngine: NSObject {
     private var savedPlaybackTime: CMTime = .zero
     private var targetFPS: TargetFPS = .fps120
     private var isMuted: Bool = true
+    private var hasDisabledAutomaticTermination: Bool = false
     
     public override init() {
         self.player = AVQueuePlayer()
@@ -104,6 +105,13 @@ public final class VideoEngine: NSObject {
         // Zero-copy direct hardware fast path:
         // Direct AVURLAsset binding allows VideoToolbox hardware decoding directly to unified memory
         let playerItem = AVPlayerItem(asset: asset)
+        
+        // Zero audio decode overhead: explicitly disable all audio tracks on AVPlayerItem
+        for track in playerItem.tracks {
+            if track.assetTrack?.mediaType == .audio {
+                track.isEnabled = false
+            }
+        }
         
         // M3 Pro Unified Memory Optimization:
         // Cap forward buffer to 2.0s to avoid aggressive 300MB+ frame buffer caching while keeping loop seamless.
@@ -236,6 +244,7 @@ public final class VideoEngine: NSObject {
                     player.rate = Float(playbackSpeed)
                 }
                 isPlaying = true
+                updateAutomaticTermination()
                 delegate?.videoEngineDidChangeState(self, isPlaying: true)
             }
             return
@@ -247,6 +256,7 @@ public final class VideoEngine: NSObject {
             player.rate = Float(playbackSpeed)
         }
         isPlaying = true
+        updateAutomaticTermination()
         WindowManager.shared.unfreezeAllFrames()
         delegate?.videoEngineDidChangeState(self, isPlaying: true)
     }
@@ -285,6 +295,7 @@ public final class VideoEngine: NSObject {
         savedPlaybackTime = player.currentTime()
         player.pause()
         isPlaying = false
+        updateAutomaticTermination()
         delegate?.videoEngineDidChangeState(self, isPlaying: false)
     }
     
@@ -332,8 +343,22 @@ public final class VideoEngine: NSObject {
         }
     }
     
+    private func updateAutomaticTermination() {
+        if isPlaying && !hasDisabledAutomaticTermination {
+            ProcessInfo.processInfo.disableAutomaticTermination("LiveWallpaper Playback")
+            hasDisabledAutomaticTermination = true
+        } else if !isPlaying && hasDisabledAutomaticTermination {
+            ProcessInfo.processInfo.enableAutomaticTermination("LiveWallpaper Playback")
+            hasDisabledAutomaticTermination = false
+        }
+    }
+    
     public func tearDown() {
         pause()
+        if hasDisabledAutomaticTermination {
+            ProcessInfo.processInfo.enableAutomaticTermination("LiveWallpaper Playback")
+            hasDisabledAutomaticTermination = false
+        }
         playerLooper?.disableLooping()
         playerLooper = nil
         player.removeAllItems()

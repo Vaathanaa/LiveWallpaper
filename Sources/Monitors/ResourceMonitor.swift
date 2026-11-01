@@ -31,6 +31,7 @@ public final class ResourceMonitor: NSObject, OcclusionDetectorDelegate {
     private var isScreenSaverActive: Bool = false
     private var isScreenAsleep: Bool = false
     private var isSystemAsleep: Bool = false
+    private var isSessionActive: Bool = true
     
     public override init() {
         super.init()
@@ -123,13 +124,13 @@ public final class ResourceMonitor: NSObject, OcclusionDetectorDelegate {
         )
         wsCenter.addObserver(
             self,
-            selector: #selector(sessionDidChangeReceived),
+            selector: #selector(sessionDidResignActiveReceived),
             name: NSWorkspace.sessionDidResignActiveNotification,
             object: nil
         )
         wsCenter.addObserver(
             self,
-            selector: #selector(sessionDidChangeReceived),
+            selector: #selector(sessionDidBecomeActiveReceived),
             name: NSWorkspace.sessionDidBecomeActiveNotification,
             object: nil
         )
@@ -205,6 +206,17 @@ public final class ResourceMonitor: NSObject, OcclusionDetectorDelegate {
     @objc private func screenSaverDidStopReceived() {
         isScreenSaverActive = false
         evaluateAllConditions()
+    }
+    
+    @objc private func sessionDidResignActiveReceived() {
+        isSessionActive = false
+        evaluateAllConditions()
+    }
+    
+    @objc private func sessionDidBecomeActiveReceived() {
+        isSessionActive = true
+        evaluateAllConditions()
+        delegate?.resourceMonitorDidWakeOrUnlock()
     }
     
     @objc private func sessionDidChangeReceived() {
@@ -352,6 +364,9 @@ public final class ResourceMonitor: NSObject, OcclusionDetectorDelegate {
         if settings.isUserPaused {
             reasons.insert(.userPaused)
         }
+        if !isSessionActive {
+            reasons.insert(.screenLocked)
+        }
         if isScreenLocked {
             reasons.insert(.screenLocked)
         }
@@ -370,7 +385,7 @@ public final class ResourceMonitor: NSObject, OcclusionDetectorDelegate {
         if settings.pauseOnBattery && Self.isOnBatteryPower() {
             reasons.insert(.onBattery)
         }
-        if settings.pauseOnLowPowerMode && ProcessInfo.processInfo.isLowPowerModeEnabled {
+        if ProcessInfo.processInfo.isLowPowerModeEnabled {
             reasons.insert(.lowPowerMode)
         }
         if settings.pauseOnThermalThrottling {

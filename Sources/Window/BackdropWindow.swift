@@ -46,12 +46,8 @@ public final class BackdropWindow: NSWindow {
     public func updateWindowLevel(_ mode: WindowLevelMode) {
         switch mode {
         case .desktop:
-            // kCGDesktopWindowLevel + 1 (-2147483622):
-            // Sits directly on top of the root desktop wallpaper canvas (-2147483624) and below desktop icons (-2147483603).
-            // Recognized by macOS WindowServer as native desktop background, enabling hardware
-            // direct scanout and butter-smooth 120Hz ProMotion gesture animations during
-            // Mission Control, App Exposé, and "Show Desktop".
-            self.level = NSWindow.Level(Int(CGWindowLevelForKey(.desktopWindow)) + 1)
+            // Standard desktop level: sits directly at CGWindowLevelForKey(.desktopWindow)
+            self.level = NSWindow.Level(Int(CGWindowLevelForKey(.desktopWindow)))
         case .belowIcons:
             // Level -2147483604: Sits directly behind desktop icons and widgets (-2147483603)
             self.level = NSWindow.Level(Int(CGWindowLevelForKey(.desktopIconWindow)) - 1)

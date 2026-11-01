@@ -6,7 +6,7 @@ import Darwin
 public final class AppDelegate: NSObject, NSApplicationDelegate, StatusMenuControllerDelegate, NSWindowDelegate {
     public static private(set) var shared: AppDelegate!
     
-    private var menuController: StatusMenuController!
+    private var menuController: StatusMenuController?
     private var settingsWindowController: NSWindowController?
     private var sigtermSource: DispatchSourceSignal?
     private var sigintSource: DispatchSourceSignal?
@@ -78,9 +78,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, StatusMenuContr
         // Save original system desktop wallpapers
         LockScreenPosterManager.shared.saveOriginalWallpapers()
         
-        menuController = StatusMenuController()
-        menuController.delegate = self
-        
+        // Menu bar UI is natively handled by SwiftUI MenuBarExtra in LiveWallpaperApp
         WindowManager.shared.start()
         PlaybackCoordinator.shared.start()
         
@@ -238,6 +236,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, StatusMenuContr
     }
     
     public func openSettingsWindow() {
+        // Transition activation policy to regular so settings window receives focus and Dock icon appears while open
+        NSApp.setActivationPolicy(.regular)
+        
         if settingsWindowController == nil {
             let settingsView = SettingsView()
             let hostingController = NSHostingController(rootView: settingsView)
@@ -260,6 +261,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, StatusMenuContr
     public func windowWillClose(_ notification: Notification) {
         if let window = notification.object as? NSWindow, window === settingsWindowController?.window {
             SystemDiagnostics.shared.stopMonitoring()
+            // Hide the Dock icon when the main settings window is closed
+            NSApp.setActivationPolicy(.accessory)
         }
     }
 }
