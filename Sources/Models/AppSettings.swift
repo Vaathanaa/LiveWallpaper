@@ -121,7 +121,7 @@ public enum ParticlePreset: String, CaseIterable, Identifiable, Codable {
 public final class AppSettings: ObservableObject {
     public static let shared = AppSettings()
     
-    private let defaults = UserDefaults(suiteName: "com.local.LiveWallpaper") ?? UserDefaults.standard
+    private let defaults = UserDefaults.standard
     
     // MARK: - Standard Video & Display Properties
     

@@ -126,10 +126,6 @@ public final class BackdropWindowController: NSWindowController {
             }
             updateParticleOverlay()
             
-            if PlaybackCoordinator.shared.resourceMonitor.activePauseReasons.isEmpty {
-                PlaybackCoordinator.shared.play()
-            }
-            
         case .metal:
             backgroundPlane.layer?.backgroundColor = NSColor.clear.cgColor
             playerView.isHidden = true

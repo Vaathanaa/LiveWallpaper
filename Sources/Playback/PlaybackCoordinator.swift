@@ -207,7 +207,13 @@ public final class PlaybackCoordinator: NSObject, ResourceMonitorDelegate, Video
         return primary?.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID ?? 0
     }
     
+    private var isExecutingPlay: Bool = false
+    
     public func play() {
+        guard !isExecutingPlay else { return }
+        isExecutingPlay = true
+        defer { isExecutingPlay = false }
+        
         AppSettings.shared.isUserPaused = false
         resourceMonitor.evaluateAllConditions()
         
@@ -238,7 +244,9 @@ public final class PlaybackCoordinator: NSObject, ResourceMonitorDelegate, Video
     
     public func loadVideo(url: URL, syncScreenSaver: Bool = true) {
         let settings = AppSettings.shared
-        settings.contentType = .video
+        if settings.contentType != .video {
+            settings.contentType = .video
+        }
         settings.isUserPaused = false
         
         if let bookmark = SecurityBookmarkManager.shared.createBookmark(for: url) {
