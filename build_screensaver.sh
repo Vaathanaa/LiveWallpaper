@@ -35,9 +35,9 @@ cat << 'EOF' > "$SAVER_BUNDLE/Contents/Info.plist"
     <key>CFBundlePackageType</key>
     <string>BNDL</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.2.2</string>
+    <string>1.2.3</string>
     <key>CFBundleVersion</key>
-    <string>1.2.2</string>
+    <string>1.2.3</string>
     <key>NSPrincipalClass</key>
     <string>LiveWallpaperScreenSaverView</string>
 </dict>

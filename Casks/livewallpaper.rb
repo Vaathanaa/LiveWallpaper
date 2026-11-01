@@ -1,5 +1,5 @@
 cask "livewallpaper" do
-  version "1.2.2"
+  version "1.2.3"
   sha256 :no_check
 
   url "https://github.com/Vaathanaa/LiveWallpaper/releases/download/v#{version}/LiveWallpaper-#{version}.dmg"
