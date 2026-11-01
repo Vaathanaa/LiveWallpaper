@@ -102,27 +102,8 @@ public final class VideoEngine: NSObject {
         }
         
         // Zero-copy direct hardware fast path:
-        // If muted, construct a pure video-only composition so coreaudiod NEVER claims
-        // a "PreventUserIdleSystemSleep" power assertion on the speaker device!
-        let playableAsset: AVAsset
-        if isMuted {
-            let comp = AVMutableComposition()
-            if let videoTrack = comp.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid),
-               let sourceVideo = try? await asset.loadTracks(withMediaType: .video).first,
-               let duration = try? await asset.load(.duration) {
-                try? videoTrack.insertTimeRange(CMTimeRange(start: .zero, duration: duration), of: sourceVideo, at: .zero)
-                if let transform = try? await sourceVideo.load(.preferredTransform) {
-                    videoTrack.preferredTransform = transform
-                }
-                playableAsset = comp
-            } else {
-                playableAsset = asset
-            }
-        } else {
-            playableAsset = asset
-        }
-        
-        let playerItem = AVPlayerItem(asset: playableAsset)
+        // Direct AVURLAsset binding allows VideoToolbox hardware decoding directly to unified memory
+        let playerItem = AVPlayerItem(asset: asset)
         
         // M3 Pro Unified Memory Optimization:
         // Cap forward buffer to 2.0s to avoid aggressive 300MB+ frame buffer caching while keeping loop seamless.
@@ -153,6 +134,7 @@ public final class VideoEngine: NSObject {
         
         self.currentItem = playerItem
         self.player.isMuted = isMuted
+        self.player.volume = isMuted ? 0.0 : 1.0
         self.player.automaticallyWaitsToMinimizeStalling = false
         self.player.defaultRate = Float(playbackSpeed)
         
@@ -325,20 +307,7 @@ public final class VideoEngine: NSObject {
         guard muted != self.isMuted else { return }
         self.isMuted = muted
         player.isMuted = muted
-        
-        // Dynamic track rebuilding:
-        // When unmuted, rebuild pipeline with audio track included.
-        // When muted, strip audio track so coreaudiod releases speaker power assertion.
-        if videoURL != nil {
-            let currentTime = player.currentTime()
-            let wasPlaying = isPlaying
-            Task { @MainActor in
-                await setupPlayerPipeline(seekTo: currentTime)
-                if wasPlaying {
-                    self.play()
-                }
-            }
-        }
+        player.volume = muted ? 0.0 : 1.0
     }
     
     public func updateFramerate(_ fps: TargetFPS) async {

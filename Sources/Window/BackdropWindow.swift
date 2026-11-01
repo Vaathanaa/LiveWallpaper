@@ -17,8 +17,8 @@ public final class BackdropWindow: NSWindow {
         
         self.isReleasedWhenClosed = false
         self.hasShadow = false
-        self.isOpaque = false
-        self.backgroundColor = .clear
+        self.isOpaque = true
+        self.backgroundColor = .black
         self.ignoresMouseEvents = true
         self.canHide = false
         self.isExcludedFromWindowsMenu = true

@@ -36,20 +36,19 @@ public final class BackdropWindowController: NSWindowController {
         
         let screenBounds = NSRect(origin: .zero, size: screen.frame.size)
         
-        // Root Container: Translucent blended backing allows WindowServer GPU compositing
-        // without monopolizing the external monitor's hardware video scanout plane
+        // Root Container: Opaque backing allows WindowServer to perform direct hardware scanout
         let root = NSView(frame: screenBounds)
         root.wantsLayer = true
-        root.layer?.backgroundColor = NSColor.clear.cgColor
-        root.layer?.isOpaque = false
+        root.layer?.backgroundColor = NSColor.black.cgColor
+        root.layer?.isOpaque = true
         root.layer?.allowsEdgeAntialiasing = false
         self.containerView = root
         
         // Background Depth Plane (Video / Web Shaders)
         let bgPlane = NSView(frame: screenBounds)
         bgPlane.wantsLayer = true
-        bgPlane.layer?.backgroundColor = NSColor.clear.cgColor
-        bgPlane.layer?.isOpaque = false
+        bgPlane.layer?.backgroundColor = NSColor.black.cgColor
+        bgPlane.layer?.isOpaque = true
         bgPlane.layer?.allowsEdgeAntialiasing = false
         self.backgroundPlane = bgPlane
         root.addSubview(bgPlane)
