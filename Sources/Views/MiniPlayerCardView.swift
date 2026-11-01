@@ -113,11 +113,12 @@ public struct MiniPlayerCardView: View {
                     set: { newValue in
                         scrubProgress = newValue
                         isDraggingScrubber = true
-                        seekToFraction(newValue)
+                        seekToFraction(newValue, exact: false)
                     }
                 ), in: 0...1) { editing in
                     if !editing {
                         isDraggingScrubber = false
+                        seekToFraction(scrubProgress, exact: true)
                     }
                 }
                 .controlSize(.mini)
@@ -222,8 +223,8 @@ public struct MiniPlayerCardView: View {
         isPlaying = engine.isPlaying
     }
     
-    private func seekToFraction(_ fraction: Double) {
-        PlaybackCoordinator.shared.seek(toFraction: fraction)
+    private func seekToFraction(_ fraction: Double, exact: Bool = true) {
+        PlaybackCoordinator.shared.seek(toFraction: fraction, exact: exact)
     }
     
     private func formatTime(_ seconds: Double) -> String {

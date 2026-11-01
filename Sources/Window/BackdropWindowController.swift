@@ -111,7 +111,7 @@ public final class BackdropWindowController: NSWindowController {
         
         switch settings.contentType {
         case .video:
-            backgroundPlane.layer?.backgroundColor = NSColor.clear.cgColor
+            backgroundPlane.layer?.backgroundColor = NSColor.black.cgColor
             playerView.isHidden = false
             if let web = webView {
                 web.pause()
@@ -126,7 +126,7 @@ public final class BackdropWindowController: NSWindowController {
             updateParticleOverlay()
             
         case .metal:
-            backgroundPlane.layer?.backgroundColor = NSColor.clear.cgColor
+            backgroundPlane.layer?.backgroundColor = NSColor.black.cgColor
             playerView.isHidden = true
             if let web = webView {
                 web.pause()
@@ -149,7 +149,7 @@ public final class BackdropWindowController: NSWindowController {
             updateParticleOverlay()
             
         case .web:
-            backgroundPlane.layer?.backgroundColor = NSColor.clear.cgColor
+            backgroundPlane.layer?.backgroundColor = NSColor.black.cgColor
             playerView.isHidden = true
             if let metal = metalView {
                 metal.pause()

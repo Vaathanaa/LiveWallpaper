@@ -167,6 +167,7 @@ public final class VideoPlayerView: NSView {
     }
     
     public func unfreezeCurrentFrame() {
+        guard playerLayer.player?.currentItem != nil else { return }
         isFrozen = false
         CATransaction.begin()
         CATransaction.setDisableActions(true)

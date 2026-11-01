@@ -3,7 +3,7 @@ import SwiftUI
 import Darwin
 
 @MainActor
-public final class AppDelegate: NSObject, NSApplicationDelegate, StatusMenuControllerDelegate {
+public final class AppDelegate: NSObject, NSApplicationDelegate, StatusMenuControllerDelegate, NSWindowDelegate {
     public static private(set) var shared: AppDelegate!
     
     private var menuController: StatusMenuController!
@@ -247,6 +247,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, StatusMenuContr
             window.styleMask = [.titled, .closable, .miniaturizable]
             window.isReleasedWhenClosed = false
             window.center()
+            window.delegate = self
             
             settingsWindowController = NSWindowController(window: window)
         }
@@ -254,5 +255,11 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, StatusMenuContr
         NSApp.activate(ignoringOtherApps: true)
         settingsWindowController?.showWindow(nil)
         settingsWindowController?.window?.makeKeyAndOrderFront(nil)
+    }
+    
+    public func windowWillClose(_ notification: Notification) {
+        if let window = notification.object as? NSWindow, window === settingsWindowController?.window {
+            SystemDiagnostics.shared.stopMonitoring()
+        }
     }
 }

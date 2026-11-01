@@ -482,9 +482,14 @@ public final class StatusMenuController: NSObject, NSMenuDelegate {
             panel.canChooseFiles = true
             panel.canChooseDirectories = false
             panel.allowsMultipleSelection = false
-            panel.allowedContentTypes = [.movie, .mpeg4Movie, .quickTimeMovie]
+            var types: [UTType] = [.movie, .video, .mpeg4Movie, .quickTimeMovie]
+            if let m4v = UTType(filenameExtension: "m4v") { types.append(m4v) }
+            if let mp4 = UTType(filenameExtension: "mp4") { types.append(mp4) }
+            panel.allowedContentTypes = types
             panel.prompt = "Assign to Display"
             panel.message = "Choose a video backdrop for this display:"
+            panel.level = .floating
+            panel.center()
             
             NSApp.activate(ignoringOtherApps: true)
             

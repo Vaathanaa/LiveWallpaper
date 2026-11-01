@@ -554,10 +554,10 @@ public final class PlaybackCoordinator: NSObject, ResourceMonitorDelegate, Video
         AppSettings.shared.playbackSpeed = speed
     }
     
-    public func seek(toFraction fraction: Double) {
-        primaryEngine.seek(toFraction: fraction)
+    public func seek(toFraction fraction: Double, exact: Bool = true) {
+        primaryEngine.seek(toFraction: fraction, exact: exact)
         for engine in perDisplayEngines.values {
-            engine.seek(toFraction: fraction)
+            engine.seek(toFraction: fraction, exact: exact)
         }
     }
     

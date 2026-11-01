@@ -264,13 +264,18 @@ public final class VideoEngine: NSObject {
         player.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero)
     }
     
-    public func seek(toFraction fraction: Double) {
+    public func seek(toFraction fraction: Double, exact: Bool = true) {
         guard let item = player.currentItem else { return }
         let durationSeconds = CMTimeGetSeconds(item.duration)
         if durationSeconds.isFinite && durationSeconds > 0 {
             let targetSeconds = max(0, min(durationSeconds, durationSeconds * fraction))
             let targetTime = CMTime(seconds: targetSeconds, preferredTimescale: 600)
-            player.seek(to: targetTime, toleranceBefore: .zero, toleranceAfter: .zero)
+            if exact {
+                player.seek(to: targetTime, toleranceBefore: .zero, toleranceAfter: .zero)
+            } else {
+                let tolerance = CMTime(seconds: 0.25, preferredTimescale: 600)
+                player.seek(to: targetTime, toleranceBefore: tolerance, toleranceAfter: tolerance)
+            }
         }
     }
     
