@@ -25,7 +25,7 @@ curl -fsSL https://raw.githubusercontent.com/Vaathanaa/LiveWallpaper/main/instal
 ### Option 2: Guided macOS Installer Wizard (`.pkg`)
 For enterprise users or those who prefer a traditional macOS installer wizard:
 
-1. Download **`LiveWallpaper-Installer-1.2.1.pkg`** from [Latest Releases](https://github.com/Vaathanaa/LiveWallpaper/releases/latest).
+1. Download **`LiveWallpaper-Installer-1.2.2.pkg`** from [Latest Releases](https://github.com/Vaathanaa/LiveWallpaper/releases/latest).
 2. Double-click the `.pkg` file.
 3. Follow the guided installation wizard.
 4. Launch `LiveWallpaper` from `/Applications` or Spotlight.
@@ -33,7 +33,7 @@ For enterprise users or those who prefer a traditional macOS installer wizard:
 ---
 
 ### Option 3: Drag-and-Drop Disk Image (`.dmg`)
-1. Download **`LiveWallpaper-1.2.1.dmg`** from [Latest Releases](https://github.com/Vaathanaa/LiveWallpaper/releases/latest).
+1. Download **`LiveWallpaper-1.2.2.dmg`** from [Latest Releases](https://github.com/Vaathanaa/LiveWallpaper/releases/latest).
 2. Double-click to mount the `.dmg`.
 3. Drag **`LiveWallpaper.app`** to the **Applications** folder shortcut.
 4. *(Optional)* Drag **`LiveWallpaper.saver`** to **Screen Savers**.

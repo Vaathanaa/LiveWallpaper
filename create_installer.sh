@@ -4,7 +4,7 @@ set -e
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$PROJECT_DIR"
 
-VERSION="1.2.1"
+VERSION="1.2.2"
 DIST_DIR="$PROJECT_DIR/dist"
 BUILD_TEMP="$PROJECT_DIR/.build_installer"
 
