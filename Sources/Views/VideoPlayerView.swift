@@ -84,7 +84,7 @@ public final class VideoPlayerView: NSView {
         // which eliminates WindowServer cursor compositor alpha-blending bugs (preventing stray black pixels
         // tracking custom-scaled accessibility mouse pointers).
         playerLayer.isOpaque = true
-        playerLayer.opacity = 0.999
+        playerLayer.opacity = 1.0
         playerLayer.videoGravity = .resizeAspectFill
         playerLayer.autoresizingMask = [.layerWidthSizable, .layerHeightSizable]
         playerLayer.needsDisplayOnBoundsChange = false

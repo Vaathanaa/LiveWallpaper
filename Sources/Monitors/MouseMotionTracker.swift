@@ -68,9 +68,10 @@ public final class MouseMotionTracker: NSObject, ObservableObject {
         lastMouseMoveTimestamp = CACurrentMediaTime()
         
         // Passive global mouse tracking: zero permissions needed, zero click interception
-        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved) { [weak self] event in
-            Task { @MainActor in
-                self?.handleMouseMoved(location: NSEvent.mouseLocation)
+        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved) { [weak self] _ in
+            let loc = NSEvent.mouseLocation
+            DispatchQueue.main.async {
+                self?.handleMouseMoved(location: loc)
             }
         }
         
@@ -137,6 +138,9 @@ public final class MouseMotionTracker: NSObject, ObservableObject {
     // MARK: - Input Handling
     
     private func handleMouseMoved(location: CGPoint) {
+        let dx = abs(location.x - currentPoint.x)
+        let dy = abs(location.y - currentPoint.y)
+        guard dx >= 1.0 || dy >= 1.0 else { return }
         currentPoint = location
         lastMouseMoveTimestamp = CACurrentMediaTime()
         wakeDisplayLink()

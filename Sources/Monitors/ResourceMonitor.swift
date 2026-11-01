@@ -151,9 +151,10 @@ public final class ResourceMonitor: NSObject, OcclusionDetectorDelegate {
     
     private func startPowerPolling() {
         powerPollingTimer?.invalidate()
-        // Poll every 5 seconds (was 2.0s) — IOKit power source queries + CGSessionCopyCurrentDictionary
-        // are expensive; 5s is sufficient since NSWorkspace notifications handle instant state changes.
-        powerPollingTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
+        // Poll every 15 seconds — instant events (plugged in/unplugged, lock/unlock, sleep/wake, app switches)
+        // are dispatched in real-time via NSWorkspace and distributed notifications.
+        // 15s is ideal for slow battery percentage drift with zero CPU wakeups.
+        powerPollingTimer = Timer.scheduledTimer(withTimeInterval: 15.0, repeats: true) { [weak self] _ in
             guard let self = self else { return }
             Task { @MainActor in
                 self.evaluateAllConditions()
