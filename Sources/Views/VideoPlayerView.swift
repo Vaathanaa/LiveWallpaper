@@ -10,6 +10,7 @@ public final class VideoPlayerView: NSView {
     
     private let dimmingOverlayLayer = CALayer()
     private let readabilityGradientLayer = CAGradientLayer()
+    private var isFrozen: Bool = false
     
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -122,6 +123,7 @@ public final class VideoPlayerView: NSView {
     public func freezeCurrentFrame() {
         guard let player = playerLayer.player,
               let item = player.currentItem else { return }
+        isFrozen = true
         let asset = item.asset
         let time = player.currentTime()
         let generator = AVAssetImageGenerator(asset: asset)
@@ -129,13 +131,19 @@ public final class VideoPlayerView: NSView {
         generator.requestedTimeToleranceBefore = .zero
         generator.requestedTimeToleranceAfter = .zero
         
-        if let cgImage = try? generator.copyCGImage(at: time, actualTime: nil) {
-            CATransaction.begin()
-            CATransaction.setDisableActions(true)
-            playerLayer.contents = cgImage
-            CATransaction.commit()
-            
-            WallpaperColorHarmony.shared.extractPalette(from: cgImage)
+        // Generate thumbnail off the main thread to avoid 50-200ms stall during video swap
+        Task.detached(priority: .userInitiated) {
+            guard let cgImage = try? generator.copyCGImage(at: time, actualTime: nil) else { return }
+            await MainActor.run { [weak self] in
+                guard let self = self else { return }
+                if self.isFrozen {
+                    CATransaction.begin()
+                    CATransaction.setDisableActions(true)
+                    self.playerLayer.contents = cgImage
+                    CATransaction.commit()
+                }
+                WallpaperColorHarmony.shared.extractPalette(from: cgImage)
+            }
         }
     }
     
@@ -159,6 +167,7 @@ public final class VideoPlayerView: NSView {
     }
     
     public func unfreezeCurrentFrame() {
+        isFrozen = false
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         playerLayer.contents = nil

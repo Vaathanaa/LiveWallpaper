@@ -2,25 +2,42 @@ import SwiftUI
 import AVFoundation
 import Combine
 
+public final class MiniPlayerVideoNSView: NSView {
+    public let playerLayer = AVPlayerLayer()
+    
+    override public init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        layer?.backgroundColor = NSColor.black.cgColor
+        playerLayer.videoGravity = .resizeAspectFill
+        playerLayer.masksToBounds = true
+        playerLayer.player = PlaybackCoordinator.shared.primaryEngine.player
+        layer?.addSublayer(playerLayer)
+    }
+    
+    public required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+    
+    override public func layout() {
+        super.layout()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        playerLayer.frame = bounds
+        CATransaction.commit()
+    }
+}
+
 public struct MiniPlayerPreviewRepresentable: NSViewRepresentable {
     public init() {}
     
-    public func makeNSView(context: Context) -> NSView {
-        let view = NSView()
-        view.wantsLayer = true
-        let playerLayer = AVPlayerLayer(player: PlaybackCoordinator.shared.primaryEngine.player)
-        playerLayer.videoGravity = .resizeAspectFill
-        playerLayer.autoresizingMask = [.layerWidthSizable, .layerHeightSizable]
-        playerLayer.masksToBounds = true
-        view.layer = playerLayer
-        return view
+    public func makeNSView(context: Context) -> MiniPlayerVideoNSView {
+        return MiniPlayerVideoNSView(frame: .zero)
     }
     
-    public func updateNSView(_ nsView: NSView, context: Context) {
-        if let playerLayer = nsView.layer as? AVPlayerLayer {
-            if playerLayer.player !== PlaybackCoordinator.shared.primaryEngine.player {
-                playerLayer.player = PlaybackCoordinator.shared.primaryEngine.player
-            }
+    public func updateNSView(_ nsView: MiniPlayerVideoNSView, context: Context) {
+        if nsView.playerLayer.player !== PlaybackCoordinator.shared.primaryEngine.player {
+            nsView.playerLayer.player = PlaybackCoordinator.shared.primaryEngine.player
         }
     }
 }
@@ -168,7 +185,9 @@ public struct MiniPlayerCardView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
         .onReceive(timer) { _ in
-            updateState()
+            if StatusMenuController.isMenuOpen {
+                updateState()
+            }
         }
         .onAppear {
             updateState()

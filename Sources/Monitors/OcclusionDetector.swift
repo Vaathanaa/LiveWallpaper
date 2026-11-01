@@ -21,8 +21,10 @@ public final class OcclusionDetector {
     
     public func start() {
         stop()
-        // Slow periodic check (every 3 seconds)
-        checkTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self] _ in
+        // Periodic occlusion check every 5 seconds (was 3.0s).
+        // CGWindowListCopyWindowInfo is expensive; NSWorkspace notifications + debounced
+        // evaluation handle rapid app switches, so 5s background polling is sufficient.
+        checkTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
             guard let self = self else { return }
             Task { @MainActor in
                 self.evaluateOcclusion()

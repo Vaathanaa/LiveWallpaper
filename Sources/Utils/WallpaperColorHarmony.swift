@@ -11,7 +11,7 @@ public final class WallpaperColorHarmony: ObservableObject {
     @Published public private(set) var primaryNSColor: NSColor = .controlAccentColor
     @Published public private(set) var hexString: String = "#007AFF"
     
-    private let ciContext = CIContext(options: [.useSoftwareRenderer: false])
+    nonisolated private static let sharedCIContext = CIContext(options: [.useSoftwareRenderer: false])
     
     private init() {
         if let savedHex = UserDefaults.standard.string(forKey: "dynamicAccentColorHex"),
@@ -30,8 +30,7 @@ public final class WallpaperColorHarmony: ObservableObject {
             guard let outputImage = filter.outputImage else { return }
             
             var bitmap = [UInt8](repeating: 0, count: 4)
-            let context = CIContext(options: [.useSoftwareRenderer: false])
-            context.render(
+            Self.sharedCIContext.render(
                 outputImage,
                 toBitmap: &bitmap,
                 rowBytes: 4,

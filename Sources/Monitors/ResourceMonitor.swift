@@ -150,7 +150,10 @@ public final class ResourceMonitor: NSObject, OcclusionDetectorDelegate {
     }
     
     private func startPowerPolling() {
-        powerPollingTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
+        powerPollingTimer?.invalidate()
+        // Poll every 5 seconds (was 2.0s) — IOKit power source queries + CGSessionCopyCurrentDictionary
+        // are expensive; 5s is sufficient since NSWorkspace notifications handle instant state changes.
+        powerPollingTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
             guard let self = self else { return }
             Task { @MainActor in
                 self.evaluateAllConditions()

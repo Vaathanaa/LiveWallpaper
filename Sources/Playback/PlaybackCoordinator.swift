@@ -208,6 +208,18 @@ public final class PlaybackCoordinator: NSObject, ResourceMonitorDelegate, Video
     }
     
     public func play() {
+        AppSettings.shared.isUserPaused = false
+        resourceMonitor.evaluateAllConditions()
+        
+        if primaryEngine.videoURL == nil {
+            loadPersistedVideo()
+        }
+        
+        guard resourceMonitor.activePauseReasons.isEmpty else {
+            NSLog("[PlaybackCoordinator] Cannot play: active pause reasons: \(resourceMonitor.activePauseReasons)")
+            return
+        }
+        
         primaryEngine.play()
         for engine in perDisplayEngines.values {
             engine.play()
@@ -215,6 +227,9 @@ public final class PlaybackCoordinator: NSObject, ResourceMonitorDelegate, Video
     }
     
     public func pause() {
+        AppSettings.shared.isUserPaused = true
+        resourceMonitor.evaluateAllConditions()
+        
         primaryEngine.pause()
         for engine in perDisplayEngines.values {
             engine.pause()
@@ -223,6 +238,8 @@ public final class PlaybackCoordinator: NSObject, ResourceMonitorDelegate, Video
     
     public func loadVideo(url: URL, syncScreenSaver: Bool = true) {
         let settings = AppSettings.shared
+        settings.contentType = .video
+        settings.isUserPaused = false
         
         if let bookmark = SecurityBookmarkManager.shared.createBookmark(for: url) {
             settings.videoBookmark = bookmark
@@ -510,9 +527,11 @@ public final class PlaybackCoordinator: NSObject, ResourceMonitorDelegate, Video
     // MARK: - Resource & Playback Control
     
     public func togglePlayPause() {
-        let settings = AppSettings.shared
-        settings.isUserPaused.toggle()
-        resourceMonitor.evaluateAllConditions()
+        if primaryEngine.isPlaying {
+            pause()
+        } else {
+            play()
+        }
     }
     
     public func toggleMute() {

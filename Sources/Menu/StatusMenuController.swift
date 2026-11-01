@@ -10,6 +10,7 @@ public protocol StatusMenuControllerDelegate: AnyObject {
 @MainActor
 public final class StatusMenuController: NSObject, NSMenuDelegate {
     public weak var delegate: StatusMenuControllerDelegate?
+    public static var isMenuOpen: Bool = false
     
     private var statusItem: NSStatusItem!
     private let menu = NSMenu()
@@ -290,11 +291,16 @@ public final class StatusMenuController: NSObject, NSMenuDelegate {
     }
     
     public func menuWillOpen(_ menu: NSMenu) {
+        Self.isMenuOpen = true
         buildContentTypeSubmenu()
         buildWeatherOverlaySubmenu()
         buildDisplayModeSubmenu()
         updateMenuState()
         AppSettings.shared.refreshLaunchAtLoginStatus()
+    }
+    
+    public func menuDidClose(_ menu: NSMenu) {
+        Self.isMenuOpen = false
     }
     
     public func updateMenuState() {
@@ -468,20 +474,25 @@ public final class StatusMenuController: NSObject, NSMenuDelegate {
     @objc private func selectVideoForSpecificDisplay(_ sender: NSMenuItem) {
         guard let displayID = sender.representedObject as? CGDirectDisplayID else { return }
         
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = true
-        panel.canChooseDirectories = false
-        panel.allowsMultipleSelection = false
-        panel.allowedContentTypes = [.movie, .mpeg4Movie, .quickTimeMovie]
-        panel.prompt = "Assign to Display"
-        panel.message = "Choose a video backdrop for this display:"
+        // Close menu first so the NSOpenPanel can present properly in LSUIElement apps
+        menu.cancelTracking()
         
-        NSApp.activate(ignoringOtherApps: true)
-        
-        if panel.runModal() == .OK, let url = panel.url {
-            PlaybackCoordinator.shared.setVideoForDisplay(url: url, displayID: displayID)
-            buildDisplayModeSubmenu()
-            updateMenuState()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+            let panel = NSOpenPanel()
+            panel.canChooseFiles = true
+            panel.canChooseDirectories = false
+            panel.allowsMultipleSelection = false
+            panel.allowedContentTypes = [.movie, .mpeg4Movie, .quickTimeMovie]
+            panel.prompt = "Assign to Display"
+            panel.message = "Choose a video backdrop for this display:"
+            
+            NSApp.activate(ignoringOtherApps: true)
+            
+            if panel.runModal() == .OK, let url = panel.url {
+                PlaybackCoordinator.shared.setVideoForDisplay(url: url, displayID: displayID)
+                self?.buildDisplayModeSubmenu()
+                self?.updateMenuState()
+            }
         }
     }
     
@@ -492,23 +503,38 @@ public final class StatusMenuController: NSObject, NSMenuDelegate {
     }
     
     @objc private func chooseVideo() {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = true
-        panel.canChooseDirectories = false
-        panel.allowsMultipleSelection = false
-        panel.allowedContentTypes = [.movie, .mpeg4Movie, .quickTimeMovie]
-        panel.prompt = "Set as Backdrop"
-        panel.message = "Choose a video file (.mp4, .mov, .m4v) for your desktop backdrop:"
+        // Close the menu bar dropdown FIRST — NSOpenPanel.runModal() cannot present
+        // while an NSMenu event-tracking run loop is active (LSUIElement app).
+        // Dispatch after a short delay so the menu fully dismisses before the
+        // modal sheet steals first-responder focus.
+        menu.cancelTracking()
         
-        NSApp.activate(ignoringOtherApps: true)
-        
-        if panel.runModal() == .OK, let url = panel.url {
-            AppSettings.shared.contentType = .video
-            PlaybackCoordinator.shared.loadVideo(url: url)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+            let panel = NSOpenPanel()
+            panel.canChooseFiles = true
+            panel.canChooseDirectories = false
+            panel.allowsMultipleSelection = false
+            var types: [UTType] = [.movie, .video, .mpeg4Movie, .quickTimeMovie]
+            if let m4v = UTType(filenameExtension: "m4v") { types.append(m4v) }
+            if let mp4 = UTType(filenameExtension: "mp4") { types.append(mp4) }
+            panel.allowedContentTypes = types
+            panel.prompt = "Set as Backdrop"
+            panel.message = "Choose a video file (.mp4, .mov, .m4v) for your desktop backdrop:"
+            panel.level = .floating
+            panel.center()
+            
+            NSApp.activate(ignoringOtherApps: true)
+            
+            if panel.runModal() == .OK, let url = panel.url {
+                AppSettings.shared.contentType = .video
+                PlaybackCoordinator.shared.loadVideo(url: url)
+                self?.updateMenuState()
+            }
         }
     }
     
     @objc private func previewScreenSaver() {
+        menu.cancelTracking()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
             let script = """
             tell application "System Events"
